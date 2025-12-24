@@ -2,16 +2,19 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { motion } from "framer-motion"; // 借用一下動畫庫讓後台也漂亮點
+import { motion } from "framer-motion";
 import { User, Lock, LogOut } from "lucide-react";
 
+// ★★★ 1. 定義完整的科目清單 (跟學生端一樣) ★★★
+const SUBJECTS = ["國文", "英文", "數學", "理化", "生物", "地科", "歷史", "地理", "公民"];
+
 export default function AdminPage() {
-  // --- 登入狀態管理 ---
-  const [currentTeacher, setCurrentTeacher] = useState<any>(null); // 存現在是哪位老師登入
+  // --- 登入狀態 ---
+  const [currentTeacher, setCurrentTeacher] = useState<any>(null);
   const [loginName, setLoginName] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   
-  // --- 後台功能狀態 ---
+  // --- 後台狀態 ---
   const [activeTab, setActiveTab] = useState("class");
   const [loading, setLoading] = useState(false);
   const [studentList, setStudentList] = useState<any[]>([]);
@@ -19,33 +22,34 @@ export default function AdminPage() {
   // 表單共用
   const [selectedName, setSelectedName] = useState(""); 
   
-  // 各功能欄位
-  const [subject, setSubject] = useState("數學");
+  // 成績專用
+  const [subject, setSubject] = useState(SUBJECTS[0]); // 預設選第一個科目
   const [score, setScore] = useState("");
   const [examDate, setExamDate] = useState("");
   const [unit, setUnit] = useState("");
   
+  // 點數專用
   const [points, setPoints] = useState("");
   const [reason, setReason] = useState("");
 
+  // 上課紀錄專用
   const [classDate, setClassDate] = useState(new Date().toISOString().slice(0, 10));
   const [progress, setProgress] = useState("");
   const [homework, setHomework] = useState("");
   const [duration, setDuration] = useState("1");
 
+  // 學費計算專用
   const [tuitionMonth, setTuitionMonth] = useState(new Date().toISOString().slice(0, 7));
   const [tuitionResult, setTuitionResult] = useState<any>(null);
   const [newRate, setNewRate] = useState("");
 
-  // ★★★ 1. 檢查是否有登入紀錄 (讓老師重整網頁不用重登) ★★★
+  // 檢查登入
   useEffect(() => {
     const savedTeacher = localStorage.getItem("teacherName");
-    if (savedTeacher) {
-      setCurrentTeacher({ name: savedTeacher });
-    }
+    if (savedTeacher) setCurrentTeacher({ name: savedTeacher });
   }, []);
 
-  // ★★★ 2. 登入後，才去抓學生名單 ★★★
+  // 抓學生名單
   useEffect(() => {
     if (currentTeacher) {
       const fetchStudents = async () => {
@@ -59,38 +63,29 @@ export default function AdminPage() {
     }
   }, [currentTeacher]);
 
-  // --- 老師登入邏輯 ---
+  // 登入功能
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     const cleanName = loginName.trim();
     const cleanPass = loginPassword.trim();
-
-    const { data } = await supabase
-      .from("teachers")
-      .select("*")
-      .eq("name", cleanName)
-      .eq("password", cleanPass)
-      .single();
-
+    const { data } = await supabase.from("teachers").select("*").eq("name", cleanName).eq("password", cleanPass).single();
     setLoading(false);
-
     if (data) {
       setCurrentTeacher(data);
-      localStorage.setItem("teacherName", data.name); // 記住老師
+      localStorage.setItem("teacherName", data.name);
     } else {
-      alert("登入失敗：名字或密碼錯誤 ❌");
+      alert("登入失敗 ❌");
     }
   };
 
   const handleLogout = () => {
     localStorage.removeItem("teacherName");
     setCurrentTeacher(null);
-    setLoginName("");
-    setLoginPassword("");
+    setLoginName(""); setLoginPassword("");
   };
 
-  // --- 送出功能 (現在不用再檢查 1234 密碼了，因為已經登入了) ---
+  // --- 送出功能 ---
 
   const handleGradeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,7 +146,7 @@ export default function AdminPage() {
     else alert("✅ 時薪已更新！");
   };
 
-  // --- 畫面渲染：如果沒登入，顯示登入框 ---
+  // --- 未登入顯示 ---
   if (!currentTeacher) {
     return (
       <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#111827" }}>
@@ -176,7 +171,7 @@ export default function AdminPage() {
     );
   }
 
-  // --- 畫面渲染：已登入，顯示控制台 ---
+  // --- 已登入顯示 ---
   return (
     <div style={{ maxWidth: "600px", margin: "30px auto", padding: "20px", fontFamily: "sans-serif" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
@@ -186,7 +181,6 @@ export default function AdminPage() {
         </button>
       </div>
 
-      {/* 學生選單 */}
       <div style={{ marginBottom: "20px", padding: "15px", background: "#f3f4f6", borderRadius: "10px" }}>
         <label style={{ fontWeight: "bold", display: "block", marginBottom: "5px" }}>目前操作學生</label>
         <select value={selectedName} onChange={(e) => { setSelectedName(e.target.value); setTuitionResult(null); }} style={selectStyle}>
@@ -194,7 +188,6 @@ export default function AdminPage() {
         </select>
       </div>
 
-      {/* 分頁按鈕 */}
       <div style={{ display: "flex", gap: "5px", marginBottom: "20px", flexWrap: "wrap" }}>
         <button onClick={() => setActiveTab("class")} style={getTabStyle(activeTab === "class", "#059669")}>📚 上課</button>
         <button onClick={() => setActiveTab("grade")} style={getTabStyle(activeTab === "grade", "#2563eb")}>📝 成績</button>
@@ -202,7 +195,6 @@ export default function AdminPage() {
         <button onClick={() => setActiveTab("tuition")} style={getTabStyle(activeTab === "tuition", "#db2777")}>💰 算學費</button>
       </div>
 
-      {/* 各功能區塊 (省略重複的樣式細節，邏輯與之前相同) */}
       {activeTab === "class" && (
         <form onSubmit={handleClassSubmit} style={{ ...formStyle, background: "#ecfdf5" }}>
           <div style={{ display: "flex", gap: "10px" }}>
@@ -221,14 +213,15 @@ export default function AdminPage() {
         </form>
       )}
 
+      {/* ★★★ 這裡就是修正的地方：換成完整科目選單 ★★★ */}
       {activeTab === "grade" && (
         <form onSubmit={handleGradeSubmit} style={formStyle}>
           <div style={{ display: "flex", gap: "10px" }}>
             <input type="date" value={examDate} onChange={(e) => setExamDate(e.target.value)} style={inputStyle} />
             <select value={subject} onChange={(e) => setSubject(e.target.value)} style={selectStyle}>
-              <option value="數學">數學</option>
-              <option value="英文">英文</option>
-              <option value="理化">理化</option>
+              {SUBJECTS.map((sub) => (
+                <option key={sub} value={sub}>{sub}</option>
+              ))}
             </select>
           </div>
           <input type="text" value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="單元" style={inputStyle} />
@@ -279,7 +272,6 @@ export default function AdminPage() {
   );
 }
 
-// 樣式區
 const loginInputStyle = { width: "100%", padding: "12px 12px 12px 40px", borderRadius: "10px", border: "1px solid #ddd", fontSize: "16px", boxSizing: "border-box" as const };
 const inputStyle = { width: "100%", padding: "10px", borderRadius: "5px", border: "1px solid #ccc", boxSizing: "border-box" as const };
 const selectStyle = { width: "100%", padding: "10px", borderRadius: "5px", border: "1px solid #ccc", fontSize: "16px", boxSizing: "border-box" as const };
