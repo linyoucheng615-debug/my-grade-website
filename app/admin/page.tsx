@@ -1,12 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
-import { LogOut, Pencil, Trash2, Calendar, TrendingUp, Award, User, Lock, BookOpen, MessageSquare } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LogOut, Pencil, Trash2, User, Lock, BookOpen, MessageSquare, TrendingUp, Filter } from "lucide-react";
 import { createClient } from '@supabase/supabase-js';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-// --- 1. Supabase 設定 ---
+// --- Supabase 設定 ---
 const supabaseUrl = "https://ynkvxixhiwwnocqybprs.supabase.co";
 const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlua3Z4aXhoaXd3bm9jcXlicHJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY1MDM5MzYsImV4cCI6MjA4MjA3OTkzNn0.9Z_SKdFXQOrZXEHT4J4wkSXBpt097tOuuXI6IFJN_FA";
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -18,7 +17,6 @@ const COLORS: Record<string, string> = {
   "歷史": "#6366f1", "地理": "#14b8a6", "公民": "#f97316"
 };
 
-// --- 2. 定義元件介面 ---
 interface HistoryListProps {
   data: any[];
   type: string;
@@ -37,27 +35,30 @@ export default function AdminPage() {
   const [editingId, setEditingId] = useState<number | null>(null); 
   const [historyData, setHistoryData] = useState<any[]>([]); 
 
-  // 表單狀態
+  // 表單資料
   const [subject, setSubject] = useState(SUBJECTS[2]);
   const [score, setScore] = useState("");
   const [examDate, setExamDate] = useState("");
-  const [unit, setUnit] = useState("");
+  const [unit, setUnit] = useState(""); 
   const [points, setPoints] = useState("");
   const [reason, setReason] = useState("");
   
-  // 上課紀錄相關 (包含新欄位)
   const [classDate, setClassDate] = useState(new Date().toISOString().slice(0, 10));
   const [progress, setProgress] = useState("");
-  const [homework, setHomework] = useState(""); // 作業
-  const [note, setNote] = useState("");         // 補充事項
+  const [homework, setHomework] = useState("");
+  const [note, setNote] = useState("");
+  // ★ 確保這裡有預設值
   const [duration, setDuration] = useState("1.5");
 
-  // 學費與報表
+  // 報表與學費
   const [tuitionMonth, setTuitionMonth] = useState(new Date().toISOString().slice(0, 7));
   const [tuitionDetails, setTuitionDetails] = useState<any[]>([]);
   const [subjectRates, setSubjectRates] = useState<any[]>([]);
-  const [subjectAverages, setSubjectAverages] = useState<Record<string, number>>({});
-  const [chartData, setChartData] = useState<any[]>([]);
+  
+  // 報表專用
+  const [chartData, setChartData] = useState<any[]>([]); 
+  const [gradeFilter, setGradeFilter] = useState("數學"); 
+  const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
 
   useEffect(() => {
     const saved = localStorage.getItem("teacherName");
@@ -95,6 +96,36 @@ export default function AdminPage() {
     setHistoryData(data || []);
   };
 
+  const fetchStudentDetails = async () => {
+    const { data: grades } = await supabase.from("grades").select("*").eq("student_name", selectedName).order("exam_date", { ascending: false });
+    if (grades) {
+      setChartData(grades);
+      const subjects = Array.from(new Set(grades.map((g: any) => g.subject))) as string[];
+      setAvailableSubjects(subjects);
+      if (subjects.length > 0 && !subjects.includes(gradeFilter)) {
+          setGradeFilter(subjects[0]);
+      }
+    }
+  };
+
+  const getFilteredGrades = () => {
+    return chartData.filter((g: any) => g.subject === gradeFilter);
+  };
+
+  const getProcessedChartData = () => {
+    const list = getFilteredGrades();
+    if (list.length === 0) return [];
+    const sorted = [...list].sort((a, b) => new Date(a.exam_date).getTime() - new Date(b.exam_date).getTime());
+    return sorted.map((g:any) => ({ date: g.exam_date, score: g.score }));
+  };
+
+  const getSubjectAverage = () => {
+    const list = getFilteredGrades();
+    if (list.length === 0) return 0;
+    const sum = list.reduce((acc: number, curr: any) => acc + curr.score, 0);
+    return Math.round(sum / list.length);
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -104,7 +135,7 @@ export default function AdminPage() {
       setCurrentTeacher(data); 
       localStorage.setItem("teacherName", data.name); 
     } else {
-      alert("❌ 登入失敗：姓名或密碼錯誤");
+      alert("❌ 登入失敗");
     }
   };
 
@@ -116,7 +147,8 @@ export default function AdminPage() {
   const resetForm = () => {
     setEditingId(null);
     setScore(""); setUnit(""); setPoints(""); setReason(""); 
-    setProgress(""); setHomework(""); setNote(""); // 清空新欄位
+    setProgress(""); setHomework(""); setNote(""); 
+    // 不重置 duration，保留預設值或上次輸入
   };
 
   const handleSubmit = async (e: React.FormEvent, type: string) => {
@@ -126,10 +158,11 @@ export default function AdminPage() {
     let payload: any = { student_name: selectedName };
 
     if (type === "class") {
-        // 這裡加入了 homework 和 note
         payload = { ...payload, class_date: classDate, progress, homework, note, duration: Number(duration), subject };
     }
-    else if (type === "grade") payload = { ...payload, subject, score: Number(score), exam_date: examDate, unit };
+    else if (type === "grade") {
+        payload = { ...payload, subject, score: Number(score), exam_date: examDate, unit };
+    }
     else if (type === "point") payload = { ...payload, points: Number(points), reason };
 
     const { error } = editingId 
@@ -138,7 +171,7 @@ export default function AdminPage() {
 
     setLoading(false);
     if (error) alert(error.message);
-    else { alert("🎉 儲存成功！"); resetForm(); fetchHistoryData(); fetchStudentDetails(); }
+    else { alert("🎉 儲存成功！"); resetForm(); fetchHistoryData(); if(activeTab==="view") fetchStudentDetails(); }
   };
 
   const handleTuitionCheck = async () => {
@@ -168,42 +201,16 @@ export default function AdminPage() {
     fetchRates();
   };
 
-  const fetchStudentDetails = async () => {
-    const { data: gData } = await supabase.from("grades").select("*").eq("student_name", selectedName).order("exam_date", { ascending: true });
-    if (gData) {
-      const grouped: any = {};
-      const avgs: any = {};
-      gData.forEach(g => {
-        if (!grouped[g.exam_date]) grouped[g.exam_date] = { date: g.exam_date };
-        grouped[g.exam_date][g.subject] = g.score;
-        if (!avgs[g.subject]) avgs[g.subject] = { t: 0, c: 0 };
-        avgs[g.subject].t += g.score;
-        avgs[g.subject].c += 1;
-      });
-      setChartData(Object.values(grouped));
-      const finalAvgs: any = {};
-      Object.keys(avgs).forEach(k => finalAvgs[k] = Math.round(avgs[k].t / avgs[k].c));
-      setSubjectAverages(finalAvgs);
-    }
-  };
-
-  // --- 🌸 登入介面 ---
   if (!currentTeacher) return (
     <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f1f5f9" }}>
-      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} style={{ background: "white", padding: "40px", borderRadius: "24px", width: "100%", maxWidth: "380px", boxShadow: "0 10px 25px rgba(0,0,0,0.1)" }}>
+      <div style={{ background: "white", padding: "40px", borderRadius: "24px", width: "100%", maxWidth: "380px", boxShadow: "0 10px 25px rgba(0,0,0,0.1)" }}>
         <h1 style={{ textAlign: "center", marginBottom: "30px", color: "#1e3a8a", fontSize: "28px" }}>🍎 老師登入</h1>
         <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-          <div style={{ position: "relative" }}>
-            <User size={18} style={{ position: "absolute", left: "12px", top: "15px", color: "#94a3b8" }} />
-            <input type="text" placeholder="老師姓名" value={loginName} onChange={(e) => setLoginName(e.target.value)} style={loginInputStyle} required />
-          </div>
-          <div style={{ position: "relative" }}>
-            <Lock size={18} style={{ position: "absolute", left: "12px", top: "15px", color: "#94a3b8" }} />
-            <input type="password" placeholder="登入密碼" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} style={loginInputStyle} required />
-          </div>
-          <button type="submit" disabled={loading} style={btnStyle("#2563eb")}>{loading ? "登入中..." : "進入管理系統"}</button>
+            <div style={{position:"relative"}}><User size={18} style={{position:"absolute",left:12,top:15,color:"#94a3b8"}}/><input type="text" placeholder="帳號" value={loginName} onChange={e=>setLoginName(e.target.value)} style={loginInputStyle}/></div>
+            <div style={{position:"relative"}}><Lock size={18} style={{position:"absolute",left:12,top:15,color:"#94a3b8"}}/><input type="password" placeholder="密碼" value={loginPassword} onChange={e=>setLoginPassword(e.target.value)} style={loginInputStyle}/></div>
+            <button type="submit" disabled={loading} style={btnStyle("#2563eb")}>登入</button>
         </form>
-      </motion.div>
+      </div>
     </div>
   );
 
@@ -233,20 +240,16 @@ export default function AdminPage() {
         <form onSubmit={e => handleSubmit(e, "class")} style={formStyle}>
           <h3>📚 新增上課進度</h3>
           <div style={{ display: "flex", gap: "10px" }}>
-            <select value={subject} onChange={e => setSubject(e.target.value)} style={selectStyle}>
-              {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+            <select value={subject} onChange={e => setSubject(e.target.value)} style={selectStyle}>{SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}</select>
             <input type="date" value={classDate} onChange={e => setClassDate(e.target.value)} style={inputStyle} />
-            <input type="number" step="0.5" value={duration} onChange={e => setDuration(e.target.value)} style={{ ...inputStyle, width: "100px" }} />
+            {/* ★ 這裡加回了時數輸入框 */}
+            <input type="number" step="0.5" placeholder="時數" value={duration} onChange={e => setDuration(e.target.value)} style={{ ...inputStyle, width: "100px" }} />
           </div>
-          <input type="text" placeholder="📝 本日進度內容" value={progress} onChange={e => setProgress(e.target.value)} style={inputStyle} />
-          
-          {/* 找回來的作業欄位 & 新增的備註欄位 */}
+          <input type="text" placeholder="📝 本日進度" value={progress} onChange={e => setProgress(e.target.value)} style={inputStyle} />
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-             <input type="text" placeholder="🏠 回家作業" value={homework} onChange={e => setHomework(e.target.value)} style={inputStyle} />
-             <input type="text" placeholder="💡 補充事項 / 備註" value={note} onChange={e => setNote(e.target.value)} style={inputStyle} />
+             <input type="text" placeholder="🏠 作業" value={homework} onChange={e => setHomework(e.target.value)} style={inputStyle} />
+             <input type="text" placeholder="💡 備註" value={note} onChange={e => setNote(e.target.value)} style={inputStyle} />
           </div>
-          
           <button type="submit" style={btnStyle("#10b981")}>儲存紀錄</button>
         </form>
       )}
@@ -255,11 +258,10 @@ export default function AdminPage() {
         <form onSubmit={e => handleSubmit(e, "grade")} style={formStyle}>
           <h3>📝 成績輸入</h3>
           <div style={{ display: "flex", gap: "10px" }}>
-            <select value={subject} onChange={e => setSubject(e.target.value)} style={selectStyle}>
-              {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+            <select value={subject} onChange={e => setSubject(e.target.value)} style={selectStyle}>{SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}</select>
             <input type="date" value={examDate} onChange={e => setExamDate(e.target.value)} style={inputStyle} />
           </div>
+          <input type="text" placeholder="📖 考試範圍 / 單元 (如: 第一課)" value={unit} onChange={e => setUnit(e.target.value)} style={inputStyle} />
           <input type="number" placeholder="分數" value={score} onChange={e => setScore(e.target.value)} style={inputStyle} />
           <button type="submit" style={btnStyle("#3b82f6")}>儲存成績</button>
         </form>
@@ -285,7 +287,7 @@ export default function AdminPage() {
             {tuitionDetails.length > 0 && (
               <div style={{ marginTop: "15px", borderTop: "2px dashed #ec4899", paddingTop: "15px" }}>
                 {tuitionDetails.map(t => (
-                  <div key={t.subject} style={{ display: "flex", justifyContent: "space-between", padding: "12px", background: "white", borderRadius: "10px", marginBottom: "8px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+                  <div key={t.id} style={{ display: "flex", justifyContent: "space-between", padding: "12px", background: "white", borderRadius: "10px", marginBottom: "8px" }}>
                     <span><b>{t.subject}</b> ({t.hours}hr × ${t.rate})</span>
                     <span style={{ fontWeight: "bold", color: "#ec4899" }}>${t.total}</span>
                   </div>
@@ -313,21 +315,52 @@ export default function AdminPage() {
 
       {activeTab === "view" && (
         <div style={{ background: "white", padding: "20px", borderRadius: "15px", border: "1px solid #e2e8f0" }}>
-          <h3>📊 成績趨勢圖</h3>
-          <div style={{ height: "400px", marginTop: "20px" }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="date" />
-                <YAxis domain={[0, 100]} />
-                <Tooltip />
-                <Legend />
-                {SUBJECTS.map(sub => (
-                  <Line key={sub} type="monotone" dataKey={sub} stroke={COLORS[sub]} strokeWidth={3} connectNulls={true} dot={{ r: 5 }} />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
+          
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
+             <h3>📊 單科成績分析</h3>
+             {gradeFilter && (
+                <div style={{ fontSize: "14px", fontWeight: "bold", color: "#64748b", background: "#f1f5f9", padding: "5px 12px", borderRadius: "20px" }}>
+                   {gradeFilter}平均：<span style={{ color: COLORS[gradeFilter] || "#3b82f6", fontSize: "16px" }}>{getSubjectAverage()}</span> 分
+                </div>
+             )}
           </div>
+
+          <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "10px", marginBottom: "10px" }}>
+             {availableSubjects.map((sub: any) => (
+                <button key={sub} onClick={() => setGradeFilter(sub)} style={filterBtnStyle(gradeFilter === sub, COLORS[sub])}>
+                    {sub}
+                </button>
+             ))}
+             {availableSubjects.length === 0 && <span style={{fontSize:"14px", color:"#94a3b8"}}>該學生尚無成績資料</span>}
+          </div>
+
+          {getProcessedChartData().length > 0 ? (
+            <div style={{ height: "300px", marginTop: "20px", marginBottom: "30px" }}>
+                <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={getProcessedChartData()}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="date" />
+                        <YAxis domain={[0, 100]} />
+                        <Tooltip />
+                        <Legend />
+                        <Line type="monotone" dataKey="score" name={gradeFilter} stroke={COLORS[gradeFilter] || "#3b82f6"} strokeWidth={3} dot={{ r: 5 }} />
+                    </LineChart>
+                </ResponsiveContainer>
+            </div>
+          ) : <div style={{ height: "200px", display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8" }}>尚無圖表數據</div>}
+
+          <h4 style={{ color: "#64748b", margin: "0 0 10px 0" }}>📜 詳細成績列表</h4>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "10px" }}>
+             {getFilteredGrades().map((g: any) => (
+                 <div key={g.id} style={{ ...cardStyle, textAlign: "center", padding: "15px", borderTop: `3px solid ${COLORS[g.subject] || '#cbd5e1'}` }}>
+                     <div style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "5px" }}>{g.exam_date}</div>
+                     <div style={{ fontSize: "14px", fontWeight: "bold", color: "#334155" }}>{g.subject}</div>
+                     <div style={{ fontSize: "24px", fontWeight: "bold", color: g.score >= 60 ? "#2563eb" : "#ef4444", margin: "5px 0" }}>{g.score}</div>
+                     <div style={{ fontSize: "12px", color: "#64748b" }}>{g.unit}</div>
+                 </div>
+             ))}
+          </div>
+
         </div>
       )}
 
@@ -337,39 +370,44 @@ export default function AdminPage() {
           if (activeTab === "class") { 
               setProgress(item.progress); setClassDate(item.class_date); 
               setSubject(item.subject); setDuration(item.duration);
-              setHomework(item.homework || ""); setNote(item.note || ""); // 載入舊資料
+              setHomework(item.homework || ""); setNote(item.note || "");
           }
-          if (activeTab === "grade") { setScore(item.score); setExamDate(item.exam_date); setSubject(item.subject); }
+          if (activeTab === "grade") { 
+              setScore(item.score); setExamDate(item.exam_date); 
+              setSubject(item.subject); setUnit(item.unit || "");
+          }
           if (activeTab === "point") { setPoints(item.points); setReason(item.reason); }
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }} onDelete={async (id: number) => {
           if (!confirm("⚠️ 確定刪除嗎？")) return;
           const table = activeTab === "class" ? "class_logs" : activeTab === "grade" ? "grades" : "point_logs";
           await supabase.from(table).delete().eq("id", id);
-          fetchHistoryData(); fetchStudentDetails();
+          fetchHistoryData(); 
         }} />
       )}
     </div>
   );
 }
 
-// --- 輔助元件 (歷史列表 - 已增加顯示作業與備註) ---
 function HistoryList({ data, type, onEdit, onDelete }: HistoryListProps) {
   return (
     <div style={{ marginTop: "30px" }}>
       {data.length > 0 ? data.map((item) => (
-        <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#ffffff", padding: "15px", borderRadius: "12px", border: "1px solid #e2e8f0", marginBottom: "10px", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
+        <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#ffffff", padding: "15px", borderRadius: "12px", border: "1px solid #e2e8f0", marginBottom: "10px" }}>
           <div style={{ fontSize: "14px", flex: 1 }}>
-            {type === "grade" ? (<span>🏷️ <b>{item.subject}</b>: {item.score}分 <span style={{color:"#94a3b8"}}>({item.exam_date})</span></span>) : 
-             type === "point" ? (<span>💎 {item.reason}: <b>{item.points}點</b></span>) : 
-             (<div>
-                <div>📂 <b>{item.subject}</b>: {item.progress} <span style={{color:"#94a3b8"}}>({item.class_date})</span></div>
-                {/* 顯示作業與備註 */}
-                <div style={{ display: "flex", gap: "10px", marginTop: "5px", fontSize: "13px", color: "#64748b" }}>
-                   {item.homework && <span style={{ display: "flex", alignItems: "center", gap: "4px" }}><BookOpen size={14} /> {item.homework}</span>}
-                   {item.note && <span style={{ display: "flex", alignItems: "center", gap: "4px" }}><MessageSquare size={14} /> {item.note}</span>}
+            {type === "grade" ? (
+                <span>🏷️ <b>{item.subject}</b>: {item.score}分 <span style={{color:"#64748b"}}>({item.unit})</span> <span style={{color:"#94a3b8", fontSize:"12px"}}>({item.exam_date})</span></span>
+            ) : type === "point" ? (
+                <span>💎 {item.reason}: <b>{item.points}點</b></span>
+            ) : (
+                <div>
+                   <div>📂 <b>{item.subject}</b>: {item.progress} <span style={{color:"#94a3b8"}}>({item.class_date})</span></div>
+                   <div style={{ display: "flex", gap: "10px", marginTop: "5px", fontSize: "13px", color: "#64748b" }}>
+                      {item.homework && <span style={{display:"flex", alignItems:"center", gap:4}}><BookOpen size={14}/> {item.homework}</span>}
+                      {item.note && <span style={{display:"flex", alignItems:"center", gap:4}}><MessageSquare size={14}/> {item.note}</span>}
+                   </div>
                 </div>
-              </div>)}
+            )}
           </div>
           <div style={{ display: "flex", gap: "15px", marginLeft: "10px" }}>
             <button onClick={() => onEdit(item)} style={{ border: "none", background: "none", cursor: "pointer", color: "#3b82f6" }}><Pencil size={18} /></button>
@@ -381,10 +419,11 @@ function HistoryList({ data, type, onEdit, onDelete }: HistoryListProps) {
   );
 }
 
-// --- 樣式與通用參數 ---
 const loginInputStyle = { width: "100%", padding: "12px 12px 12px 40px", borderRadius: "12px", border: "1px solid #e2e8f0", fontSize: "16px", boxSizing: "border-box" as const, background: "#f8fafc" };
 const inputStyle = { width: "100%", padding: "12px", margin: "6px 0", borderRadius: "10px", border: "1px solid #cbd5e1", boxSizing: "border-box" as const };
 const selectStyle = { padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "white", width: "100%", cursor: "pointer" };
 const formStyle = { background: "#ffffff", padding: "25px", borderRadius: "15px", border: "1px solid #e2e8f0", marginBottom: "25px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" };
 const btnStyle = (color: string) => ({ background: color, color: "#fff", border: "none", padding: "12px", borderRadius: "10px", cursor: "pointer", width: "100%", marginTop: "10px", fontWeight: "bold" });
 const getTabStyle = (active: boolean, color: string) => ({ flex: 1, padding: "12px", borderRadius: "10px", border: "none", background: active ? color : "#f1f5f9", color: active ? "#fff" : "#475569", fontWeight: "bold", cursor: "pointer", transition: "0.3s" });
+const cardStyle = { background: "white", padding: "20px", borderRadius: "16px", border: "1px solid #e2e8f0", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" };
+const filterBtnStyle = (active: boolean, color: string = "#334155") => ({ padding: "6px 14px", borderRadius: "20px", border: active ? `1px solid ${color}` : "1px solid #e2e8f0", background: active ? color : "white", color: active ? "white" : "#64748b", fontSize: "13px", cursor: "pointer", whiteSpace: "nowrap" as const, transition: "0.2s" });
