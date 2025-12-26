@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { LogOut, Pencil, Trash2, Calendar, TrendingUp, Award, User, Lock, XCircle } from "lucide-react";
+import { LogOut, Pencil, Trash2, Calendar, TrendingUp, Award, User, Lock, BookOpen, MessageSquare } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { createClient } from '@supabase/supabase-js';
 
@@ -18,7 +18,7 @@ const COLORS: Record<string, string> = {
   "歷史": "#6366f1", "地理": "#14b8a6", "公民": "#f97316"
 };
 
-// --- 2. 定義元件介面 (解決 image_61778f.png 的 TS 報錯) ---
+// --- 2. 定義元件介面 ---
 interface HistoryListProps {
   data: any[];
   type: string;
@@ -44,9 +44,12 @@ export default function AdminPage() {
   const [unit, setUnit] = useState("");
   const [points, setPoints] = useState("");
   const [reason, setReason] = useState("");
+  
+  // 上課紀錄相關 (包含新欄位)
   const [classDate, setClassDate] = useState(new Date().toISOString().slice(0, 10));
   const [progress, setProgress] = useState("");
-  const [homework, setHomework] = useState("");
+  const [homework, setHomework] = useState(""); // 作業
+  const [note, setNote] = useState("");         // 補充事項
   const [duration, setDuration] = useState("1.5");
 
   // 學費與報表
@@ -112,7 +115,8 @@ export default function AdminPage() {
 
   const resetForm = () => {
     setEditingId(null);
-    setScore(""); setUnit(""); setPoints(""); setReason(""); setProgress(""); setHomework("");
+    setScore(""); setUnit(""); setPoints(""); setReason(""); 
+    setProgress(""); setHomework(""); setNote(""); // 清空新欄位
   };
 
   const handleSubmit = async (e: React.FormEvent, type: string) => {
@@ -121,7 +125,10 @@ export default function AdminPage() {
     let tableName = type === "class" ? "class_logs" : type === "grade" ? "grades" : "point_logs";
     let payload: any = { student_name: selectedName };
 
-    if (type === "class") payload = { ...payload, class_date: classDate, progress, homework, duration: Number(duration), subject };
+    if (type === "class") {
+        // 這裡加入了 homework 和 note
+        payload = { ...payload, class_date: classDate, progress, homework, note, duration: Number(duration), subject };
+    }
     else if (type === "grade") payload = { ...payload, subject, score: Number(score), exam_date: examDate, unit };
     else if (type === "point") payload = { ...payload, points: Number(points), reason };
 
@@ -180,7 +187,7 @@ export default function AdminPage() {
     }
   };
 
-  // --- 🌸 登入介面 (Login UI) ---
+  // --- 🌸 登入介面 ---
   if (!currentTeacher) return (
     <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f1f5f9" }}>
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} style={{ background: "white", padding: "40px", borderRadius: "24px", width: "100%", maxWidth: "380px", boxShadow: "0 10px 25px rgba(0,0,0,0.1)" }}>
@@ -230,8 +237,16 @@ export default function AdminPage() {
               {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
             <input type="date" value={classDate} onChange={e => setClassDate(e.target.value)} style={inputStyle} />
+            <input type="number" step="0.5" value={duration} onChange={e => setDuration(e.target.value)} style={{ ...inputStyle, width: "100px" }} />
           </div>
-          <input type="text" placeholder="進度內容" value={progress} onChange={e => setProgress(e.target.value)} style={inputStyle} />
+          <input type="text" placeholder="📝 本日進度內容" value={progress} onChange={e => setProgress(e.target.value)} style={inputStyle} />
+          
+          {/* 找回來的作業欄位 & 新增的備註欄位 */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+             <input type="text" placeholder="🏠 回家作業" value={homework} onChange={e => setHomework(e.target.value)} style={inputStyle} />
+             <input type="text" placeholder="💡 補充事項 / 備註" value={note} onChange={e => setNote(e.target.value)} style={inputStyle} />
+          </div>
+          
           <button type="submit" style={btnStyle("#10b981")}>儲存紀錄</button>
         </form>
       )}
@@ -319,7 +334,11 @@ export default function AdminPage() {
       {activeTab !== "view" && activeTab !== "tuition" && (
         <HistoryList data={historyData} type={activeTab} onEdit={(item: any) => {
           setEditingId(item.id);
-          if (activeTab === "class") { setProgress(item.progress); setClassDate(item.class_date); setSubject(item.subject); }
+          if (activeTab === "class") { 
+              setProgress(item.progress); setClassDate(item.class_date); 
+              setSubject(item.subject); setDuration(item.duration);
+              setHomework(item.homework || ""); setNote(item.note || ""); // 載入舊資料
+          }
           if (activeTab === "grade") { setScore(item.score); setExamDate(item.exam_date); setSubject(item.subject); }
           if (activeTab === "point") { setPoints(item.points); setReason(item.reason); }
           window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -334,18 +353,25 @@ export default function AdminPage() {
   );
 }
 
-// --- 輔助元件 (已修正型別報錯) ---
+// --- 輔助元件 (歷史列表 - 已增加顯示作業與備註) ---
 function HistoryList({ data, type, onEdit, onDelete }: HistoryListProps) {
   return (
     <div style={{ marginTop: "30px" }}>
       {data.length > 0 ? data.map((item) => (
         <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#ffffff", padding: "15px", borderRadius: "12px", border: "1px solid #e2e8f0", marginBottom: "10px", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
-          <div style={{ fontSize: "14px" }}>
+          <div style={{ fontSize: "14px", flex: 1 }}>
             {type === "grade" ? (<span>🏷️ <b>{item.subject}</b>: {item.score}分 <span style={{color:"#94a3b8"}}>({item.exam_date})</span></span>) : 
              type === "point" ? (<span>💎 {item.reason}: <b>{item.points}點</b></span>) : 
-             (<span>📂 <b>{item.subject}</b>: {item.progress} <span style={{color:"#94a3b8"}}>({item.class_date})</span></span>)}
+             (<div>
+                <div>📂 <b>{item.subject}</b>: {item.progress} <span style={{color:"#94a3b8"}}>({item.class_date})</span></div>
+                {/* 顯示作業與備註 */}
+                <div style={{ display: "flex", gap: "10px", marginTop: "5px", fontSize: "13px", color: "#64748b" }}>
+                   {item.homework && <span style={{ display: "flex", alignItems: "center", gap: "4px" }}><BookOpen size={14} /> {item.homework}</span>}
+                   {item.note && <span style={{ display: "flex", alignItems: "center", gap: "4px" }}><MessageSquare size={14} /> {item.note}</span>}
+                </div>
+              </div>)}
           </div>
-          <div style={{ display: "flex", gap: "15px" }}>
+          <div style={{ display: "flex", gap: "15px", marginLeft: "10px" }}>
             <button onClick={() => onEdit(item)} style={{ border: "none", background: "none", cursor: "pointer", color: "#3b82f6" }}><Pencil size={18} /></button>
             <button onClick={() => onDelete(item.id)} style={{ border: "none", background: "none", cursor: "pointer", color: "#ef4444" }}><Trash2 size={18} /></button>
           </div>
