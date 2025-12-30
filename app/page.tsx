@@ -150,7 +150,7 @@ export default function StudentPortal() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "25px" }}>
         <div>
            <h2 style={{ margin: 0, fontSize: "22px", color: "#1e293b" }}>👋 {studentData.info.name}</h2>
-           <p style={{ margin: "4px 0 0 0", color: "#64748b", fontSize: "13px" }}>學習是最好的投資</p>
+           <p style={{ margin: "4px 0 0 0", color: "#64748b", fontSize: "13px" }}>分數沒有辦法決定你的價值，只有你自己才可以。</p>
         </div>
         <button onClick={handleLogout} style={{ background: "#f1f5f9", border: "none", padding: "8px", borderRadius: "50%", color: "#64748b", cursor: "pointer" }}><LogOut size={18} /></button>
       </div>
