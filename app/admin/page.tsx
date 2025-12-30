@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { LogOut, Pencil, Trash2, User, Lock, BookOpen, MessageSquare, TrendingUp, Filter } from "lucide-react";
+import { LogOut, Pencil, Trash2, User, Lock, BookOpen, MessageSquare, TrendingUp, Filter, Clock } from "lucide-react";
 import { createClient } from '@supabase/supabase-js';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
@@ -47,7 +47,6 @@ export default function AdminPage() {
   const [progress, setProgress] = useState("");
   const [homework, setHomework] = useState("");
   const [note, setNote] = useState("");
-  // ★ 確保這裡有預設值
   const [duration, setDuration] = useState("1.5");
 
   // 報表與學費
@@ -148,7 +147,6 @@ export default function AdminPage() {
     setEditingId(null);
     setScore(""); setUnit(""); setPoints(""); setReason(""); 
     setProgress(""); setHomework(""); setNote(""); 
-    // 不重置 duration，保留預設值或上次輸入
   };
 
   const handleSubmit = async (e: React.FormEvent, type: string) => {
@@ -174,26 +172,30 @@ export default function AdminPage() {
     else { alert("🎉 儲存成功！"); resetForm(); fetchHistoryData(); if(activeTab==="view") fetchStudentDetails(); }
   };
 
+  // ★ 核心修改：改為列出每日明細
   const handleTuitionCheck = async () => {
     setLoading(true);
-    const { data: classes } = await supabase.from("class_logs").select("*").eq("student_name", selectedName).ilike("class_date", `${tuitionMonth}%`);
+    const { data: classes } = await supabase.from("class_logs").select("*").eq("student_name", selectedName).ilike("class_date", `${tuitionMonth}%`).order("class_date", { ascending: false });
     const { data: rates } = await supabase.from("subject_rates").select("*").eq("student_name", selectedName);
     setLoading(false);
 
-    if (!classes || classes.length === 0) return alert("⚠️ 本月無紀錄");
+    if (!classes || classes.length === 0) {
+        setTuitionDetails([]);
+        return alert("⚠️ 本月無紀錄");
+    }
+
     const rateMap: Record<string, number> = {};
     rates?.forEach(r => rateMap[r.subject] = r.rate);
 
-    const summary: Record<string, { hours: number; rate: number }> = {};
-    classes.forEach(c => {
-      const sub = c.subject || "未分類";
-      if (!summary[sub]) summary[sub] = { hours: 0, rate: rateMap[sub] || 0 };
-      summary[sub].hours += Number(c.duration);
+    // 直接產生明細列表
+    const details = classes.map(c => {
+        const sub = c.subject || "數學";
+        const rate = rateMap[sub] || 0;
+        const total = Number(c.duration) * rate;
+        return { ...c, rate, total };
     });
 
-    setTuitionDetails(Object.entries(summary).map(([sub, val]) => ({
-      subject: sub, hours: val.hours, rate: val.rate, total: val.hours * val.rate
-    })));
+    setTuitionDetails(details);
   };
 
   const updateSubjectRate = async (sub: string, newRate: number) => {
@@ -242,7 +244,6 @@ export default function AdminPage() {
           <div style={{ display: "flex", gap: "10px" }}>
             <select value={subject} onChange={e => setSubject(e.target.value)} style={selectStyle}>{SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}</select>
             <input type="date" value={classDate} onChange={e => setClassDate(e.target.value)} style={inputStyle} />
-            {/* ★ 這裡加回了時數輸入框 */}
             <input type="number" step="0.5" placeholder="時數" value={duration} onChange={e => setDuration(e.target.value)} style={{ ...inputStyle, width: "100px" }} />
           </div>
           <input type="text" placeholder="📝 本日進度" value={progress} onChange={e => setProgress(e.target.value)} style={inputStyle} />
@@ -286,13 +287,19 @@ export default function AdminPage() {
             </div>
             {tuitionDetails.length > 0 && (
               <div style={{ marginTop: "15px", borderTop: "2px dashed #ec4899", paddingTop: "15px" }}>
+                {/* ★ 這裡改為顯示每日明細 */}
                 {tuitionDetails.map(t => (
-                  <div key={t.id} style={{ display: "flex", justifyContent: "space-between", padding: "12px", background: "white", borderRadius: "10px", marginBottom: "8px" }}>
-                    <span><b>{t.subject}</b> ({t.hours}hr × ${t.rate})</span>
-                    <span style={{ fontWeight: "bold", color: "#ec4899" }}>${t.total}</span>
+                  <div key={t.id} style={{ display: "flex", justifyContent: "space-between", padding: "12px", background: "white", borderRadius: "10px", marginBottom: "8px", borderBottom: "1px solid #f1f5f9" }}>
+                    <div>
+                        <div style={{fontWeight: "bold", fontSize: "15px"}}>{t.class_date} <span style={{fontSize: "13px", fontWeight: "normal", color: "#64748b"}}>({t.subject})</span></div>
+                        <div style={{fontSize: "12px", color: "#94a3b8"}}>{t.duration} hr × ${t.rate}/hr</div>
+                    </div>
+                    <span style={{ fontWeight: "bold", color: "#ec4899", display: "flex", alignItems: "center" }}>${t.total}</span>
                   </div>
                 ))}
-                <div style={{ textAlign: "right", fontSize: "24px", fontWeight: "bold", marginTop: "10px", color: "#be185d" }}>總計：${tuitionDetails.reduce((a,b)=>a+b.total,0)}</div>
+                <div style={{ textAlign: "right", fontSize: "24px", fontWeight: "bold", marginTop: "15px", color: "#be185d", borderTop: "2px solid #fce7f3", paddingTop: "10px" }}>
+                    總計：${tuitionDetails.reduce((a,b)=>a+b.total,0).toLocaleString()}
+                </div>
               </div>
             )}
           </div>
@@ -401,7 +408,8 @@ function HistoryList({ data, type, onEdit, onDelete }: HistoryListProps) {
                 <span>💎 {item.reason}: <b>{item.points}點</b></span>
             ) : (
                 <div>
-                   <div>📂 <b>{item.subject}</b>: {item.progress} <span style={{color:"#94a3b8"}}>({item.class_date})</span></div>
+                   {/* ★ 這裡加入了時數顯示 */}
+                   <div>📂 <b>{item.subject}</b>: {item.progress} <span style={{color:"#94a3b8"}}>({item.class_date} | {item.duration} hr)</span></div>
                    <div style={{ display: "flex", gap: "10px", marginTop: "5px", fontSize: "13px", color: "#64748b" }}>
                       {item.homework && <span style={{display:"flex", alignItems:"center", gap:4}}><BookOpen size={14}/> {item.homework}</span>}
                       {item.note && <span style={{display:"flex", alignItems:"center", gap:4}}><MessageSquare size={14}/> {item.note}</span>}
