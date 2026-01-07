@@ -5,7 +5,6 @@ import { User, Lock, BookOpen, MessageSquare, DollarSign, TrendingUp, Home, Cale
 import { createClient } from '@supabase/supabase-js';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-// --- Supabase 設定 ---
 const supabaseUrl = "https://ynkvxixhiwwnocqybprs.supabase.co";
 const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlua3Z4aXhoaXd3bm9jcXlicHJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY1MDM5MzYsImV4cCI6MjA4MjA3OTkzNn0.9Z_SKdFXQOrZXEHT4J4wkSXBpt097tOuuXI6IFJN_FA";
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -52,6 +51,7 @@ export default function StudentPortal() {
 
     localStorage.setItem("studentLogin", JSON.stringify({ name, password }));
 
+    // 這裡原本就會抓所有欄位，所以 expense 會自動被抓進來
     const { data: classLogs } = await supabase.from("class_logs").select("*").eq("student_name", student.name).order("class_date", { ascending: false }).limit(40);
     const { data: grades } = await supabase.from("grades").select("*").eq("student_name", student.name).order("exam_date", { ascending: false });
     const { data: points } = await supabase.from("point_logs").select("*").eq("student_name", student.name).order("created_at", { ascending: false });
@@ -59,16 +59,21 @@ export default function StudentPortal() {
 
     let totalFee = 0;
     let tDetails: any[] = [];
+    
+    // ★ 更新：計算邏輯加入 extra (expense)
     if (classLogs && rates) {
         const rateMap: Record<string, number> = {};
         rates.forEach((r: any) => rateMap[r.subject] = r.rate);
+        
         classLogs.forEach((log: any) => {
             if (log.class_date && log.class_date.startsWith(currentMonth)) {
                 const sub = log.subject || "數學";
                 const rate = rateMap[sub] || 0;
-                const fee = log.duration * rate;
+                const extra = log.expense || 0; // 取得資料庫裡的 expense
+                const fee = (log.duration * rate) + extra; // 總額 = 鐘點費 + 書費
+                
                 totalFee += fee;
-                tDetails.push({ ...log, fee, rate });
+                tDetails.push({ ...log, fee, rate, extra });
             }
         });
     }
@@ -150,7 +155,7 @@ export default function StudentPortal() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "25px" }}>
         <div>
            <h2 style={{ margin: 0, fontSize: "22px", color: "#1e293b" }}>👋 {studentData.info.name}</h2>
-           <p style={{ margin: "4px 0 0 0", color: "#64748b", fontSize: "13px" }}>分數沒有辦法決定你的價值，只有你自己才可以。</p>
+           <p style={{ margin: "4px 0 0 0", color: "#64748b", fontSize: "13px" }}>分數無法決定你的價值，只有你自己才可以</p>
         </div>
         <button onClick={handleLogout} style={{ background: "#f1f5f9", border: "none", padding: "8px", borderRadius: "50%", color: "#64748b", cursor: "pointer" }}><LogOut size={18} /></button>
       </div>
@@ -189,6 +194,9 @@ export default function StudentPortal() {
                         <span style={{ fontWeight: "bold", color: "#10b981", fontSize: "15px" }}>📅 {log.class_date}</span>
                         <span style={{ fontSize: "13px", background: "#f1f5f9", padding: "4px 10px", borderRadius: "20px", color: "#475569" }}>{log.subject}</span>
                     </div>
+                    {/* ★ 更新：如果在上課紀錄頁面，也顯示這堂課有額外費用 */}
+                    {log.expense > 0 && <div style={{fontSize: "13px", color: "#ec4899", fontWeight: "bold", marginBottom: "8px", display: "flex", alignItems: "center", gap: "4px"}}><DollarSign size={14}/> 雜費/書費: ${log.expense}</div>}
+                    
                     <div style={{ fontSize: "16px", color: "#334155", marginBottom: "12px", lineHeight: "1.5" }}>{log.progress}</div>
                     {(log.homework || log.note) && (
                     <div style={{ background: "#f8fafc", padding: "12px", borderRadius: "10px", fontSize: "14px" }}>
@@ -244,7 +252,14 @@ export default function StudentPortal() {
                  <div style={{ padding: "15px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", fontWeight: "bold", fontSize: "14px", color: "#64748b" }}>計算明細 ({tuitionDetails.length} 筆)</div>
                  {tuitionDetails.length > 0 ? tuitionDetails.map((item: any, idx: number) => (
                      <div key={item.id} style={{ display: "flex", justifyContent: "space-between", padding: "15px", borderBottom: idx !== tuitionDetails.length - 1 ? "1px solid #f1f5f9" : "none" }}>
-                         <div><div style={{ fontSize: "15px", fontWeight: "bold", color: "#334155" }}>{item.class_date} <span style={{fontSize: "12px", color: "#64748b", fontWeight: "normal"}}>({item.subject})</span></div><div style={{ fontSize: "12px", color: "#94a3b8" }}>{item.duration} hr × ${item.rate}/hr</div></div>
+                         <div>
+                             <div style={{ fontSize: "15px", fontWeight: "bold", color: "#334155" }}>{item.class_date} <span style={{fontSize: "12px", color: "#64748b", fontWeight: "normal"}}>({item.subject})</span></div>
+                             <div style={{ fontSize: "12px", color: "#94a3b8" }}>
+                                {item.duration} hr × ${item.rate}/hr
+                                {/* ★ 更新：如果這堂課有額外費用，顯示紅字明細 */}
+                                {item.extra > 0 && <span style={{color: "#ec4899", fontWeight: "bold", marginLeft: "5px"}}>+ 雜費 ${item.extra}</span>}
+                             </div>
+                         </div>
                          <div style={{ fontWeight: "bold", color: "#be185d" }}>${item.fee}</div>
                      </div>
                  )) : <div style={{ padding: "30px", textAlign: "center", color: "#94a3b8" }}>本月尚無上課紀錄</div>}
