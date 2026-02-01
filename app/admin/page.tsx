@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { LogOut, Pencil, Trash2, User, Lock, BookOpen, MessageSquare, TrendingUp, Filter, Clock, DollarSign } from "lucide-react";
+// ★ 關鍵修正：這裡補齊了 Copy, Check, FileText 這三個圖示，按鈕才不會壞掉
+import { LogOut, Pencil, Trash2, User, Lock, BookOpen, MessageSquare, TrendingUp, Filter, Clock, DollarSign, Copy, Check, FileText } from "lucide-react";
 import { createClient } from '@supabase/supabase-js';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
@@ -15,6 +16,8 @@ const COLORS: Record<string, string> = {
   "理化": "#3b82f6", "生物": "#8b5cf6", "地科": "#ec4899",
   "歷史": "#6366f1", "地理": "#14b8a6", "公民": "#f97316"
 };
+
+const BANK_ACCOUNT = "（822） 129541918532"; // 你的帳戶
 
 interface HistoryListProps {
   data: any[];
@@ -34,6 +37,7 @@ export default function AdminPage() {
   const [editingId, setEditingId] = useState<number | null>(null); 
   const [historyData, setHistoryData] = useState<any[]>([]); 
   const [historyFilter, setHistoryFilter] = useState("全部");
+  const [isMobile, setIsMobile] = useState(false);
 
   // 表單資料
   const [subject, setSubject] = useState(SUBJECTS[2]);
@@ -48,7 +52,7 @@ export default function AdminPage() {
   const [homework, setHomework] = useState("");
   const [note, setNote] = useState("");
   const [duration, setDuration] = useState("1.5");
-  const [expense, setExpense] = useState(""); // 書費
+  const [expense, setExpense] = useState(""); 
 
   const [tuitionMonth, setTuitionMonth] = useState(new Date().toISOString().slice(0, 7));
   const [tuitionDetails, setTuitionDetails] = useState<any[]>([]);
@@ -56,11 +60,20 @@ export default function AdminPage() {
   const [chartData, setChartData] = useState<any[]>([]); 
   const [gradeFilter, setGradeFilter] = useState("數學"); 
   const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
+  
+  // 明細生成相關狀態
+  const [billingText, setBillingText] = useState("");
+  const [isCopied, setIsCopied] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("teacherName");
     if (saved) setCurrentTeacher({ name: saved });
     fetchStudents();
+
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    handleResize(); 
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   useEffect(() => {
@@ -137,7 +150,7 @@ export default function AdminPage() {
 
   const resetForm = () => {
     setEditingId(null); setScore(""); setUnit(""); setPoints(""); setReason(""); 
-    setProgress(""); setHomework(""); setNote(""); setExpense(""); 
+    setProgress(""); setHomework(""); setNote(""); setExpense(""); setBillingText("");
   };
 
   const handleSubmit = async (e: React.FormEvent, type: string) => {
@@ -163,9 +176,11 @@ export default function AdminPage() {
 
   const handleTuitionCheck = async () => {
     setLoading(true);
-    const { data: classes } = await supabase.from("class_logs").select("*").eq("student_name", selectedName).ilike("class_date", `${tuitionMonth}%`).order("class_date", { ascending: false });
+    // 這裡我們把 ascending 改成 true，這樣明細的日期才會是從 1號、2號... 順序排列
+    const { data: classes } = await supabase.from("class_logs").select("*").eq("student_name", selectedName).ilike("class_date", `${tuitionMonth}%`).order("class_date", { ascending: true });
     const { data: rates } = await supabase.from("subject_rates").select("*").eq("student_name", selectedName);
     setLoading(false);
+    setBillingText(""); 
 
     if (!classes || classes.length === 0) { setTuitionDetails([]); return alert("⚠️ 本月無紀錄"); }
 
@@ -186,6 +201,53 @@ export default function AdminPage() {
   const updateSubjectRate = async (sub: string, newRate: number) => {
     await supabase.from("subject_rates").upsert({ student_name: selectedName, subject: sub, rate: newRate }, { onConflict: 'student_name,subject' });
     fetchRates();
+  };
+
+  // ★ 產生請款明細邏輯
+  const generateBillingText = () => {
+    if (tuitionDetails.length === 0) {
+        alert("請先按「計算」取得資料喔！");
+        return;
+    }
+
+    const month = parseInt(tuitionMonth.split("-")[1], 10);
+    
+    // 分組
+    const grouped: Record<string, any[]> = {};
+    tuitionDetails.forEach(d => {
+      const sub = d.subject || "其他";
+      if (!grouped[sub]) grouped[sub] = [];
+      grouped[sub].push(d);
+    });
+
+    // 組文字
+    let text = `${selectedName}媽媽您好：\n${month}月的課程已經結束囉！\n\n`;
+    
+    Object.keys(grouped).forEach(sub => {
+      text += `${sub}:\n`;
+      grouped[sub].forEach(item => {
+        const dObj = new Date(item.class_date);
+        const dateStr = `${dObj.getMonth() + 1}/${dObj.getDate()}`;
+        // 只有大於0才顯示雜費
+        const extraText = item.extra > 0 ? ` (+雜費${item.extra})` : "";
+        text += `${dateStr} ${item.duration}h${extraText}\n`;
+      });
+      text += "\n";
+    });
+
+    const totalHours = tuitionDetails.reduce((a, b) => a + Number(b.duration), 0);
+    const totalCost = tuitionDetails.reduce((a, b) => a + b.total, 0);
+
+    text += `共 ${totalHours}h\n課程費用共 ${totalCost.toLocaleString()} 元\n\n`;
+    text += `共 ${totalCost.toLocaleString()} 元，確認無誤後，麻煩媽媽方便的時候幫我匯到以下帳戶：\n${BANK_ACCOUNT}`;
+
+    setBillingText(text);
+  };
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(billingText);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
   };
 
   if (!currentTeacher) return (
@@ -226,9 +288,7 @@ export default function AdminPage() {
       {activeTab === "class" && (
         <form onSubmit={e => handleSubmit(e, "class")} style={formStyle}>
           <h3>📚 新增上課進度</h3>
-          
-          {/* ★ 修改重點：使用 grid 來平衡三者寬度 (2:2:1) */}
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 2fr 1fr", gap: "10px", alignItems: "center" }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 2fr 1fr", gap: "10px", alignItems: "center" }}>
             <select value={subject} onChange={e => setSubject(e.target.value)} style={{...selectStyle, width: "100%"}}>
                 {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
@@ -238,14 +298,12 @@ export default function AdminPage() {
                  <span style={{position:"absolute", right: 8, top: 18, fontSize:12, color:"#94a3b8"}}>hr</span>
             </div>
           </div>
-
           <div style={{position:"relative", marginBottom: "10px"}}>
              <DollarSign size={16} style={{position:"absolute", left:10, top:13, color:"#ec4899"}}/>
              <input type="number" placeholder="額外費用 (書費/代購費，無則留空)" value={expense} onChange={e => setExpense(e.target.value)} style={{...inputStyle, paddingLeft: 35, borderColor: "#fbcfe8"}} />
           </div>
-
           <input type="text" placeholder="📝 本日進度" value={progress} onChange={e => setProgress(e.target.value)} style={inputStyle} />
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "10px" }}>
              <input type="text" placeholder="🏠 作業" value={homework} onChange={e => setHomework(e.target.value)} style={inputStyle} />
              <input type="text" placeholder="💡 備註" value={note} onChange={e => setNote(e.target.value)} style={inputStyle} />
           </div>
@@ -256,7 +314,7 @@ export default function AdminPage() {
       {activeTab === "grade" && (
         <form onSubmit={e => handleSubmit(e, "grade")} style={formStyle}>
           <h3>📝 成績輸入</h3>
-          <div style={{ display: "flex", gap: "10px" }}>
+          <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: "10px" }}>
             <select value={subject} onChange={e => setSubject(e.target.value)} style={selectStyle}>{SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}</select>
             <input type="date" value={examDate} onChange={e => setExamDate(e.target.value)} style={inputStyle} />
           </div>
@@ -279,12 +337,49 @@ export default function AdminPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: "25px" }}>
           <div style={formStyle}>
             <h3>💰 薪資學費試算</h3>
-            <div style={{ display: "flex", gap: "10px" }}>
-              <input type="month" value={tuitionMonth} onChange={e => setTuitionMonth(e.target.value)} style={inputStyle} />
-              <button onClick={handleTuitionCheck} style={btnStyle("#ec4899")}>計算</button>
+            
+            {/* ★ 修改：按鈕與月份選擇並排 */}
+            <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+              <input 
+                type="month" 
+                value={tuitionMonth} 
+                onChange={e => setTuitionMonth(e.target.value)} 
+                style={{...inputStyle, width: "auto", flex: 1, minWidth: "120px"}} 
+              />
+              <button onClick={handleTuitionCheck} style={{...btnStyle("#ec4899"), width: "auto", marginTop: 0, padding: "10px 20px", whiteSpace: "nowrap"}}>
+                計算
+              </button>
+              {/* 生成明細按鈕 */}
+              <button 
+                onClick={generateBillingText} 
+                style={{...btnStyle("#4f46e5"), width: "auto", marginTop: 0, padding: "10px 20px", display: "flex", alignItems: "center", gap: "5px", whiteSpace: "nowrap"}}
+              >
+                <FileText size={18} /> 生成明細
+              </button>
             </div>
+            
+            {/* 生成的文字框區域 */}
+            {billingText && (
+              <div style={{ marginTop: "20px", position: "relative", animation: "fadeIn 0.3s ease" }}>
+                <label style={{fontWeight: "bold", color: "#4f46e5", marginBottom: "5px", display: "block"}}>👇 複製以下內容傳給家長：</label>
+                <textarea 
+                  value={billingText} 
+                  onChange={(e) => setBillingText(e.target.value)}
+                  style={{ width: "100%", height: "200px", padding: "15px", borderRadius: "10px", border: "2px solid #6366f1", fontSize: "14px", fontFamily: "monospace", resize: "none", background: "#f5f3ff", color: "#333" }}
+                />
+                <button 
+                  onClick={copyToClipboard}
+                  style={{ position: "absolute", top: "35px", right: "10px", background: isCopied ? "#10b981" : "#334155", color: "white", border: "none", padding: "6px 12px", borderRadius: "6px", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", transition: "0.2s" }}
+                >
+                  {isCopied ? <Check size={14}/> : <Copy size={14}/>} {isCopied ? "已複製" : "複製"}
+                </button>
+              </div>
+            )}
+
+            {/* 學費列表 */}
             {tuitionDetails.length > 0 && (
-              <div style={{ marginTop: "15px", borderTop: "2px dashed #ec4899", paddingTop: "15px" }}>
+              <div style={{ marginTop: "20px", borderTop: "2px dashed #ec4899", paddingTop: "15px" }}>
+                <div style={{ fontSize: "14px", color: "#64748b", marginBottom: "10px" }}>計算結果明細：</div>
                 {tuitionDetails.map(t => (
                   <div key={t.id} style={{ display: "flex", justifyContent: "space-between", padding: "12px", background: "white", borderRadius: "10px", marginBottom: "8px", borderBottom: "1px solid #f1f5f9" }}>
                     <div>
@@ -297,12 +392,14 @@ export default function AdminPage() {
                     <span style={{ fontWeight: "bold", color: "#ec4899", display: "flex", alignItems: "center" }}>${t.total}</span>
                   </div>
                 ))}
+                
                 <div style={{ textAlign: "right", fontSize: "24px", fontWeight: "bold", marginTop: "15px", color: "#be185d", borderTop: "2px solid #fce7f3", paddingTop: "10px" }}>
                     總計：${tuitionDetails.reduce((a,b)=>a+b.total,0).toLocaleString()}
                 </div>
               </div>
             )}
           </div>
+
           <div style={{ ...formStyle, background: "#f8fafc" }}>
             <h3>⚙️ 設定分科時薪 ({selectedName})</h3>
             <div key={selectedName} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "10px" }}>
