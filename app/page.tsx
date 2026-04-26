@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { User, Lock, BookOpen, MessageSquare, DollarSign, TrendingUp, Home, Calendar, Award, LogOut, Coins, FileText } from "lucide-react";
+import { User, Lock, BookOpen, MessageSquare, DollarSign, TrendingUp, Home, Calendar, Award, LogOut, Coins, FileText, ChevronDown, ChevronUp, Sun, Moon, Filter } from "lucide-react";
 import { createClient } from '@supabase/supabase-js';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -27,15 +27,50 @@ export default function StudentPortal() {
   
   const [activeView, setActiveView] = useState("home");
   const [gradeFilter, setGradeFilter] = useState("");
+  
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [logFilter, setLogFilter] = useState("全部");
+  const [expandedLogId, setExpandedLogId] = useState<number | null>(null);
 
   useEffect(() => {
     const savedLogin = localStorage.getItem("studentLogin");
+    const savedTheme = localStorage.getItem("studentTheme");
+    if (savedTheme === "dark") setIsDarkMode(true);
+    
     if (savedLogin) {
       const { name, password } = JSON.parse(savedLogin);
       setLoginName(name);
       fetchStudentData(name, password);
     }
   }, []);
+
+  useEffect(() => {
+    if (studentData?.classLogs) {
+      const filtered = logFilter === "全部" 
+        ? studentData.classLogs 
+        : studentData.classLogs.filter((log: any) => log.subject === logFilter);
+      setExpandedLogId(filtered.length > 0 ? filtered[0].id : null);
+    }
+  }, [logFilter, studentData]);
+
+  const toggleTheme = () => {
+    const newTheme = !isDarkMode;
+    setIsDarkMode(newTheme);
+    localStorage.setItem("studentTheme", newTheme ? "dark" : "light");
+  };
+
+  const theme = {
+    bg: isDarkMode ? "#0f172a" : "#f8fafc",
+    card: isDarkMode ? "#1e293b" : "#ffffff",
+    textMain: isDarkMode ? "#f1f5f9" : "#1e293b",
+    textMuted: isDarkMode ? "#94a3b8" : "#64748b",
+    border: isDarkMode ? "#334155" : "#e2e8f0",
+    primary: isDarkMode ? "#38bdf8" : "#0ea5e9",
+    primaryLight: isDarkMode ? "rgba(56, 189, 248, 0.1)" : "#f0f9ff",
+    shadow: isDarkMode ? "0 10px 30px rgba(0,0,0,0.5)" : "0 10px 30px rgba(14, 165, 233, 0.08)",
+    navBg: isDarkMode ? "#1e293b" : "#ffffff",
+    inputBg: isDarkMode ? "#0f172a" : "#f8fafc",
+  };
 
   const fetchStudentData = async (name: string, password: string) => {
     setLoading(true);
@@ -51,7 +86,6 @@ export default function StudentPortal() {
 
     localStorage.setItem("studentLogin", JSON.stringify({ name, password }));
 
-    // 這裡原本就會抓所有欄位，所以 expense 會自動被抓進來
     const { data: classLogs } = await supabase.from("class_logs").select("*").eq("student_name", student.name).order("class_date", { ascending: false }).limit(40);
     const { data: grades } = await supabase.from("grades").select("*").eq("student_name", student.name).order("exam_date", { ascending: false });
     const { data: points } = await supabase.from("point_logs").select("*").eq("student_name", student.name).order("created_at", { ascending: false });
@@ -60,7 +94,6 @@ export default function StudentPortal() {
     let totalFee = 0;
     let tDetails: any[] = [];
     
-    // ★ 更新：計算邏輯加入 extra (expense)
     if (classLogs && rates) {
         const rateMap: Record<string, number> = {};
         rates.forEach((r: any) => rateMap[r.subject] = r.rate);
@@ -69,9 +102,8 @@ export default function StudentPortal() {
             if (log.class_date && log.class_date.startsWith(currentMonth)) {
                 const sub = log.subject || "數學";
                 const rate = rateMap[sub] || 0;
-                const extra = log.expense || 0; // 取得資料庫裡的 expense
-                const fee = (log.duration * rate) + extra; // 總額 = 鐘點費 + 書費
-                
+                const extra = log.expense || 0; 
+                const fee = (log.duration * rate) + extra; 
                 totalFee += fee;
                 tDetails.push({ ...log, fee, rate, extra });
             }
@@ -87,7 +119,8 @@ export default function StudentPortal() {
       grades: grades || [],
       points: points || [],
       totalPoints: points?.reduce((sum: number, p: any) => sum + p.points, 0) || 0,
-      availableSubjects: subjects
+      availableSubjects: subjects,
+      logSubjects: ["全部", ...Array.from(new Set(classLogs?.map((l: any) => l.subject)))]
     });
     setTuitionTotal(totalFee);
     setTuitionDetails(tDetails);
@@ -113,6 +146,12 @@ export default function StudentPortal() {
     return studentData.grades.filter((g: any) => g.subject === gradeFilter);
   };
 
+  const getFilteredLogs = () => {
+    if (!studentData) return [];
+    if (logFilter === "全部") return studentData.classLogs;
+    return studentData.classLogs.filter((log: any) => log.subject === logFilter);
+  };
+
   const getChartData = () => {
     const list = getFilteredGrades();
     if (list.length === 0) return [];
@@ -127,22 +166,52 @@ export default function StudentPortal() {
     return Math.round(sum / list.length);
   };
 
+  const globalContainerStyle = { minHeight: "100vh", background: theme.bg, transition: "background 0.3s ease", color: theme.textMain, fontFamily: "sans-serif" };
+  
+  const cardStyle = { 
+    background: theme.card, 
+    padding: "20px", 
+    borderRadius: "20px", 
+    borderTop: `1px solid ${theme.border}`,
+    borderRight: `1px solid ${theme.border}`,
+    borderBottom: `1px solid ${theme.border}`,
+    borderLeft: `1px solid ${theme.border}`,
+    boxShadow: theme.shadow, 
+    transition: "0.3s ease" 
+  };
+  
+  const inputStyle = { width: "100%", padding: "14px 14px 14px 45px", borderRadius: "14px", border: `1px solid ${theme.border}`, background: theme.inputBg, color: theme.textMain, fontSize: "16px", outline: "none", boxSizing: "border-box" as const, transition: "0.3s" };
+  const filterBtnStyle = (active: boolean, colorStr: string = theme.primary) => ({ padding: "8px 16px", borderRadius: "20px", border: active ? `1px solid ${colorStr}` : `1px solid ${theme.border}`, background: active ? colorStr : theme.card, color: active ? "white" : theme.textMuted, fontSize: "13px", fontWeight: "bold", cursor: "pointer", whiteSpace: "nowrap" as const, transition: "all 0.2s" });
+
   if (!studentData) return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#f8fafc", padding: "20px" }}>
-      <div style={{ background: "white", padding: "40px", borderRadius: "24px", width: "100%", maxWidth: "360px", boxShadow: "0 10px 25px rgba(0,0,0,0.05)", textAlign: "center" }}>
-        <h1 style={{ color: "#1e3a8a", fontSize: "26px", marginBottom: "10px" }}>🎒 學生登入</h1>
-        <p style={{ color: "#64748b", marginBottom: "30px", fontSize: "14px" }}>請輸入姓名與密碼查詢學習歷程</p>
+    <div style={{ ...globalContainerStyle, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "20px" }}>
+      <button onClick={toggleTheme} style={{ position: "absolute", top: 20, right: 20, background: theme.card, border: `1px solid ${theme.border}`, padding: "10px", borderRadius: "50%", color: theme.textMain, cursor: "pointer", boxShadow: theme.shadow }}>{isDarkMode ? <Sun size={20} /> : <Moon size={20} />}</button>
+      <div style={{ ...cardStyle, width: "100%", maxWidth: "360px", textAlign: "center" }}>
+        <h1 style={{ color: theme.primary, fontSize: "28px", marginBottom: "10px", fontWeight: "900" }}>🎒 學習儀表板</h1>
+        <p style={{ color: theme.textMuted, marginBottom: "30px", fontSize: "14px" }}>登入以查詢專屬進度與成績</p>
         <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-          <div style={inputContainerStyle}>
-            <User size={18} style={iconStyle} />
+          <div style={{ position: "relative" }}>
+            <User size={18} style={{ position: "absolute", left: "15px", top: "16px", color: theme.textMuted }} />
             <input type="text" placeholder="學生姓名" value={loginName} onChange={e => setLoginName(e.target.value)} style={inputStyle} />
           </div>
-          <div style={inputContainerStyle}>
-            <Lock size={18} style={iconStyle} />
+          <div style={{ position: "relative" }}>
+            <Lock size={18} style={{ position: "absolute", left: "15px", top: "16px", color: theme.textMuted }} />
             <input type="password" placeholder="密碼 (預設 1234)" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} style={inputStyle} />
           </div>
-          <button type="submit" disabled={loading} style={btnStyle}>{loading ? "讀取中..." : "登入查詢"}</button>
+          <button type="submit" disabled={loading} style={{ width: "100%", padding: "14px", background: theme.primary, color: "white", border: "none", borderRadius: "14px", fontSize: "16px", fontWeight: "bold", cursor: "pointer", marginTop: "10px", transition: "0.2s" }}>{loading ? "讀取中..." : "登入"}</button>
         </form>
+
+        {/* 學生端的老師入口按鈕 */}
+        <div style={{ marginTop: "25px", borderTop: `1px solid ${theme.border}`, paddingTop: "20px" }}>
+           <button 
+             onClick={() => window.location.href = '/admin'} 
+             style={{ background: "transparent", color: theme.textMuted, border: "none", cursor: "pointer", fontSize: "14px", display: "flex", alignItems: "center", justifyContent: "center", width: "100%", gap: "8px", transition: "0.2s" }}
+             onMouseOver={(e) => e.currentTarget.style.color = theme.primary}
+             onMouseOut={(e) => e.currentTarget.style.color = theme.textMuted}
+           >
+             👨‍🏫 我是老師，切換至後台
+           </button>
+        </div>
       </div>
     </div>
   );
@@ -151,161 +220,213 @@ export default function StudentPortal() {
   const currentAvg = getSubjectAverage();
 
   return (
-    <div style={{ maxWidth: "600px", margin: "auto", padding: "20px 20px 100px 20px", fontFamily: "sans-serif", color: "#334155" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "25px" }}>
-        <div>
-           <h2 style={{ margin: 0, fontSize: "22px", color: "#1e293b" }}>👋 {studentData.info.name}</h2>
-           <p style={{ margin: "4px 0 0 0", color: "#64748b", fontSize: "13px" }}>分數無法決定你的價值，只有你自己才可以</p>
+    <div style={{ ...globalContainerStyle, paddingBottom: "100px" }}>
+      <div style={{ maxWidth: "650px", margin: "auto", padding: "20px" }}>
+        
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "30px" }}>
+          <div>
+             <h2 style={{ margin: 0, fontSize: "24px", fontWeight: "900", color: theme.textMain }}>👋 {studentData.info.name}</h2>
+             <p style={{ margin: "5px 0 0 0", color: theme.textMuted, fontSize: "13px" }}>分數無法決定價值，只有你自己可以</p>
+          </div>
+          <div style={{ display: "flex", gap: "10px" }}>
+             <button onClick={toggleTheme} style={{ background: theme.card, border: `1px solid ${theme.border}`, padding: "10px", borderRadius: "50%", color: theme.textMain, cursor: "pointer", boxShadow: theme.shadow }}>{isDarkMode ? <Sun size={18} /> : <Moon size={18} />}</button>
+             <button onClick={handleLogout} style={{ background: theme.card, border: `1px solid ${theme.border}`, padding: "10px", borderRadius: "50%", color: "#ef4444", cursor: "pointer", boxShadow: theme.shadow }}><LogOut size={18} /></button>
+          </div>
         </div>
-        <button onClick={handleLogout} style={{ background: "#f1f5f9", border: "none", padding: "8px", borderRadius: "50%", color: "#64748b", cursor: "pointer" }}><LogOut size={18} /></button>
+
+        {activeView === "home" && (
+          <div style={{ animation: "fadeIn 0.3s ease" }}>
+              <h3 style={{ fontSize: "18px", margin: "0 0 15px 0", fontWeight: "bold", color: theme.textMain }}>📌 快速功能導覽</h3>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
+                  <div onClick={() => setActiveView("class")} style={{ ...cardStyle, cursor: "pointer", borderLeftWidth: "5px", borderLeftColor: COLORS["英文"] }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}><div style={{ fontWeight: "bold", fontSize: "16px", color: theme.textMain }}>上課紀錄</div><Calendar size={20} color={COLORS["英文"]} /></div>
+                      <div style={{ fontSize: "12px", color: theme.textMuted }}>追蹤作業與進度</div>
+                  </div>
+                  <div onClick={() => setActiveView("grade")} style={{ ...cardStyle, cursor: "pointer", borderLeftWidth: "5px", borderLeftColor: COLORS["數學"] }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}><div style={{ fontWeight: "bold", fontSize: "16px", color: theme.textMain }}>成績分析</div><TrendingUp size={20} color={COLORS["數學"]} /></div>
+                      <div style={{ fontSize: "12px", color: theme.textMuted }}>各科走勢圖表</div>
+                  </div>
+                  <div onClick={() => setActiveView("tuition")} style={{ ...cardStyle, cursor: "pointer", borderLeftWidth: "5px", borderLeftColor: COLORS["理化"] }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}><div style={{ fontWeight: "bold", fontSize: "16px", color: theme.textMain }}>學費明細</div><FileText size={20} color={COLORS["理化"]} /></div>
+                      <div style={{ fontSize: "12px", color: theme.textMuted }}>本月應繳查詢</div>
+                  </div>
+                  <div onClick={() => setActiveView("points")} style={{ ...cardStyle, cursor: "pointer", borderLeftWidth: "5px", borderLeftColor: COLORS["國文"] }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}><div style={{ fontWeight: "bold", fontSize: "16px", color: theme.textMain }}>獎勵點數</div><Coins size={20} color={COLORS["國文"]} /></div>
+                      <div style={{ fontSize: "12px", color: theme.textMuted }}>累積: {studentData.totalPoints} 點</div>
+                  </div>
+              </div>
+          </div>
+        )}
+
+        {activeView === "class" && (
+          <div style={{ animation: "fadeIn 0.3s ease" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
+                  <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "bold", color: theme.textMain }}>📖 上課紀錄</h3>
+              </div>
+              
+              <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "15px", marginBottom: "10px", scrollbarWidth: "none" }}>
+                  <div style={{display: "flex", alignItems: "center", color: theme.textMuted, marginRight: "5px"}}><Filter size={16}/></div>
+                  {studentData.logSubjects.map((sub: string) => (
+                      <button key={sub} onClick={() => setLogFilter(sub)} style={filterBtnStyle(logFilter === sub, sub === "全部" ? theme.textMain : COLORS[sub])}>{sub}</button>
+                  ))}
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+                  {getFilteredLogs().map((log: any) => {
+                      const isExpanded = expandedLogId === log.id;
+                      const subColor = COLORS[log.subject] || theme.primary;
+                      
+                      return (
+                      <div key={log.id} style={{ ...cardStyle, padding: "0", overflow: "hidden", borderLeftWidth: "6px", borderLeftColor: subColor }}>
+                          <div 
+                              onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
+                              style={{ padding: "18px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", background: isExpanded ? (isDarkMode ? "#1e293b" : "#f8fafc") : theme.card, transition: "0.2s" }}
+                          >
+                              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                  <span style={{ fontSize: "13px", background: isDarkMode ? `${subColor}20` : `${subColor}15`, color: subColor, padding: "5px 12px", borderRadius: "8px", fontWeight: "bold" }}>{log.subject}</span>
+                                  <span style={{ fontWeight: "bold", color: theme.textMain, fontSize: "15px" }}>{log.class_date}</span>
+                              </div>
+                              {isExpanded ? <ChevronUp size={20} color={theme.textMuted}/> : <ChevronDown size={20} color={theme.textMuted}/>}
+                          </div>
+
+                          {isExpanded && (
+                              <div style={{ padding: "0 18px 18px 18px", background: isDarkMode ? "#1e293b" : "#f8fafc", animation: "fadeIn 0.2s ease" }}>
+                                  <div style={{ borderTop: `1px solid ${theme.border}`, paddingTop: "15px" }}>
+                                      {/* ★ 修正雙重錢字號 */}
+                                      {log.expense > 0 && <div style={{fontSize: "13px", color: "#ec4899", fontWeight: "bold", marginBottom: "10px", display: "flex", alignItems: "center", gap: "5px"}}><DollarSign size={14}/> 雜費: {log.expense}</div>}
+                                      
+                                      <div style={{ fontSize: "16px", color: theme.textMain, marginBottom: "15px", lineHeight: "1.6" }}>{log.progress}</div>
+                                      
+                                      {(log.homework || log.note) && (
+                                      <div style={{ background: theme.bg, padding: "15px", borderRadius: "12px", border: `1px solid ${theme.border}` }}>
+                                          {log.homework && (
+                                              <div style={{ display: "flex", gap: "12px", marginBottom: log.note ? "15px" : "0", alignItems: "flex-start" }}>
+                                                  <div style={{ background: isDarkMode ? "rgba(14, 165, 233, 0.2)" : "#e0f2fe", padding: "8px", borderRadius: "10px" }}><BookOpen size={18} style={{ color: "#0ea5e9" }} /></div>
+                                                  <div>
+                                                      <div style={{ fontSize: "12px", color: theme.textMuted, fontWeight: "bold", marginBottom: "3px" }}>回家作業</div>
+                                                      <div style={{ color: theme.textMain, fontSize: "15px", lineHeight: "1.4" }}>{log.homework}</div>
+                                                  </div>
+                                              </div>
+                                          )}
+                                          {log.note && (
+                                              <div style={{ display: "flex", gap: "12px", alignItems: "flex-start", marginTop: log.homework ? "15px" : "0", paddingTop: log.homework ? "15px" : "0", borderTop: log.homework ? `1px dashed ${theme.border}` : "none" }}>
+                                                  <div style={{ background: isDarkMode ? "rgba(20, 184, 166, 0.2)" : "#ccfbf1", padding: "8px", borderRadius: "10px" }}><MessageSquare size={18} style={{ color: "#14b8a6" }} /></div>
+                                                  <div>
+                                                      <div style={{ fontSize: "12px", color: theme.textMuted, fontWeight: "bold", marginBottom: "3px" }}>老師叮嚀</div>
+                                                      <div style={{ color: theme.textMain, fontSize: "15px", lineHeight: "1.4" }}>{log.note}</div>
+                                                  </div>
+                                              </div>
+                                          )}
+                                      </div>
+                                      )}
+                                  </div>
+                              </div>
+                          )}
+                      </div>
+                  )})}
+                  {getFilteredLogs().length === 0 && <div style={{textAlign: "center", padding: "30px", color: theme.textMuted}}>尚無紀錄</div>}
+              </div>
+          </div>
+        )}
+
+        {activeView === "grade" && (
+          <div style={{ animation: "fadeIn 0.3s ease" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
+                  <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "bold", color: theme.textMain }}>📝 成績分析</h3>
+                  {gradeFilter && <div style={{ fontSize: "14px", fontWeight: "bold", color: theme.textMain, background: theme.card, border: `1px solid ${theme.border}`, padding: "6px 14px", borderRadius: "20px" }}>總平均：<span style={{ color: COLORS[gradeFilter] || theme.primary, fontSize: "16px" }}>{currentAvg}</span> 分</div>}
+              </div>
+              <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "10px", marginBottom: "15px" }}>
+                  {studentData.availableSubjects.map((sub: any) => (
+                      <button key={sub} onClick={() => setGradeFilter(sub)} style={filterBtnStyle(gradeFilter === sub, COLORS[sub])}>{sub}</button>
+                  ))}
+              </div>
+              {currentChartData.length > 0 ? (
+                  <div style={{ ...cardStyle, height: "260px", padding: "20px 10px 0 0", marginBottom: "20px" }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={currentChartData}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.border} />
+                              <XAxis dataKey="date" tick={{fontSize: 10, fill: theme.textMuted}} stroke={theme.border} />
+                              <YAxis domain={[0, 100]} tick={{fontSize: 10, fill: theme.textMuted}} stroke={theme.border} />
+                              <Tooltip contentStyle={{backgroundColor: theme.card, borderColor: theme.border, color: theme.textMain, borderRadius: "10px"}} />
+                              <Line type="monotone" dataKey="score" stroke={COLORS[gradeFilter] || theme.primary} strokeWidth={4} dot={{r:5, fill: theme.card, strokeWidth: 2}} />
+                          </LineChart>
+                      </ResponsiveContainer>
+                  </div>
+              ) : <div style={{ textAlign: "center", color: theme.textMuted, padding: "30px", background: theme.card, borderRadius: "20px" }}>尚無成績資料</div>}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  {getFilteredGrades().map((g: any) => (
+                      <div key={g.id} style={{ ...cardStyle, textAlign: "center", padding: "20px", borderTopWidth: "4px", borderTopColor: COLORS[g.subject] || theme.primary }}>
+                          <div style={{ fontSize: "12px", color: theme.textMuted, marginBottom: "8px" }}>{g.exam_date}</div>
+                          <div style={{ fontSize: "15px", fontWeight: "bold", color: theme.textMain }}>{g.subject}</div>
+                          <div style={{ fontSize: "28px", fontWeight: "900", color: g.score >= 60 ? (COLORS[g.subject] || theme.primary) : "#ef4444", margin: "8px 0" }}>{g.score}</div>
+                          <div style={{ fontSize: "12px", color: theme.textMuted }}>{g.unit}</div>
+                      </div>
+                  ))}
+              </div>
+          </div>
+        )}
+
+        {activeView === "tuition" && (
+          <div style={{ animation: "fadeIn 0.3s ease" }}>
+               <h3 style={{ margin: "0 0 15px 0", fontSize: "18px", fontWeight: "bold", color: theme.textMain }}>💰 本月學費明細</h3>
+               <div style={{ background: `linear-gradient(135deg, ${theme.primary} 0%, #0369a1 100%)`, color: "white", padding: "35px 20px", borderRadius: "24px", marginBottom: "25px", textAlign: "center", boxShadow: "0 15px 30px rgba(14, 165, 233, 0.3)" }}>
+                   <div style={{ fontSize: "15px", opacity: 0.9, marginBottom: "8px" }}>{currentMonth} 應繳總額</div>
+                   <div style={{ fontSize: "48px", fontWeight: "900", letterSpacing: "1px" }}>${tuitionTotal.toLocaleString()}</div>
+               </div>
+               <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
+                   <div style={{ padding: "18px", background: isDarkMode ? "#0f172a" : "#f8fafc", borderBottom: `1px solid ${theme.border}`, fontWeight: "bold", fontSize: "14px", color: theme.textMuted }}>計算明細 ({tuitionDetails.length} 筆)</div>
+                   {tuitionDetails.length > 0 ? tuitionDetails.map((item: any, idx: number) => (
+                       <div key={item.id} style={{ display: "flex", justifyContent: "space-between", padding: "18px", borderBottom: idx !== tuitionDetails.length - 1 ? `1px solid ${theme.border}` : "none" }}>
+                           <div>
+                               <div style={{ fontSize: "15px", fontWeight: "bold", color: theme.textMain }}>{item.class_date} <span style={{fontSize: "12px", color: theme.textMuted, fontWeight: "normal"}}>({item.subject})</span></div>
+                               <div style={{ fontSize: "13px", color: theme.textMuted, marginTop: "4px" }}>
+                                  {item.duration} hr × ${item.rate}/hr
+                                  {item.extra > 0 && <span style={{color: "#ec4899", fontWeight: "bold", marginLeft: "6px"}}>+ 雜費 ${item.extra}</span>}
+                               </div>
+                           </div>
+                           <div style={{ fontWeight: "bold", color: theme.textMain, fontSize: "16px" }}>${item.fee}</div>
+                       </div>
+                   )) : <div style={{ padding: "40px", textAlign: "center", color: theme.textMuted }}>本月尚無上課紀錄</div>}
+               </div>
+          </div>
+        )}
+
+        {activeView === "points" && (
+          <div style={{ animation: "fadeIn 0.3s ease" }}>
+              <h3 style={{ margin: "0 0 15px 0", fontSize: "18px", fontWeight: "bold", color: theme.textMain }}>💎 點數紀錄</h3>
+               <div style={{ background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)", color: "white", padding: "25px", borderRadius: "24px", marginBottom: "25px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 15px 30px rgba(245, 158, 11, 0.3)" }}>
+                   <div><div style={{ fontSize: "15px", opacity: 0.9, marginBottom: "5px" }}>目前累積</div><div style={{ fontSize: "36px", fontWeight: "900" }}>{studentData.totalPoints} <span style={{fontSize: "18px", fontWeight: "normal", opacity: 0.8}}>點</span></div></div>
+                   <Award size={48} color="white" style={{ opacity: 0.8 }} />
+               </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  {studentData.points.map((point: any) => (
+                  <div key={point.id} style={{ ...cardStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div>
+                          <div style={{ fontSize: "13px", color: theme.textMuted, marginBottom: "4px" }}>{new Date(point.created_at).toLocaleDateString()}</div>
+                          <div style={{ fontSize: "16px", fontWeight: "bold", color: theme.textMain }}>{point.reason}</div>
+                      </div>
+                      <div style={{ fontSize: "22px", fontWeight: "900", color: point.points > 0 ? "#10b981" : "#ef4444" }}>{point.points > 0 ? "+" : ""}{point.points}</div>
+                  </div>
+                  ))}
+                  {studentData.points.length === 0 && <div style={{textAlign: "center", color: theme.textMuted, padding: "30px"}}>目前無點數紀錄</div>}
+              </div>
+          </div>
+        )}
+
+      </div>
+      
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: theme.navBg, borderTop: `1px solid ${theme.border}`, display: "flex", justifyContent: "space-around", padding: "12px 0 20px 0", zIndex: 100, boxShadow: theme.shadow }}>
+         <button onClick={() => setActiveView("home")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "home" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "home" ? "bold" : "normal" }}><Home size={22} /><span style={{fontSize: "11px", marginTop: "4px"}}>首頁</span></button>
+         <button onClick={() => setActiveView("class")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "class" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "class" ? "bold" : "normal" }}><BookOpen size={22} /><span style={{fontSize: "11px", marginTop: "4px", whiteSpace: "nowrap"}}>上課紀錄</span></button>
+         <button onClick={() => setActiveView("grade")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "grade" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "grade" ? "bold" : "normal" }}><TrendingUp size={22} /><span style={{fontSize: "11px", marginTop: "4px"}}>成績</span></button>
+         <button onClick={() => setActiveView("tuition")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "tuition" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "tuition" ? "bold" : "normal" }}><DollarSign size={22} /><span style={{fontSize: "11px", marginTop: "4px"}}>帳單</span></button>
+         <button onClick={() => setActiveView("points")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "points" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "points" ? "bold" : "normal" }}><Coins size={22} /><span style={{fontSize: "11px", marginTop: "4px"}}>點數</span></button>
       </div>
 
-      {activeView === "home" && (
-        <div style={{ animation: "fadeIn 0.3s ease" }}>
-            <h3 style={sectionTitleStyle}>📌 快速功能</h3>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
-                <div onClick={() => setActiveView("class")} style={{ ...menuCardStyle, borderLeft: "5px solid #10b981" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}><div style={{ fontWeight: "bold", fontSize: "16px", color: "#334155" }}>上課紀錄</div><Calendar size={20} color="#10b981" /></div>
-                    <div style={{ fontSize: "12px", color: "#64748b" }}>作業與備註查詢</div>
-                </div>
-                <div onClick={() => setActiveView("grade")} style={{ ...menuCardStyle, borderLeft: "5px solid #3b82f6" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}><div style={{ fontWeight: "bold", fontSize: "16px", color: "#334155" }}>成績分析</div><TrendingUp size={20} color="#3b82f6" /></div>
-                    <div style={{ fontSize: "12px", color: "#64748b" }}>分數走勢圖表</div>
-                </div>
-                <div onClick={() => setActiveView("tuition")} style={{ ...menuCardStyle, borderLeft: "5px solid #ec4899" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}><div style={{ fontWeight: "bold", fontSize: "16px", color: "#334155" }}>應繳學費</div><FileText size={20} color="#ec4899" /></div>
-                    <div style={{ fontSize: "12px", color: "#64748b" }}>本月明細查詢</div>
-                </div>
-                <div onClick={() => setActiveView("points")} style={{ ...menuCardStyle, borderLeft: "5px solid #f59e0b" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}><div style={{ fontWeight: "bold", fontSize: "16px", color: "#334155" }}>獎勵點數</div><Coins size={20} color="#f59e0b" /></div>
-                    <div style={{ fontSize: "12px", color: "#64748b" }}>累積: {studentData.totalPoints} 點</div>
-                </div>
-            </div>
-        </div>
-      )}
-
-      {activeView === "class" && (
-        <div style={{ animation: "fadeIn 0.3s ease" }}>
-            <h3 style={sectionTitleStyle}>📖 上課紀錄</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-                {studentData.classLogs.map((log: any) => (
-                <div key={log.id} style={cardStyle}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px", paddingBottom: "10px", borderBottom: "1px dashed #f1f5f9" }}>
-                        <span style={{ fontWeight: "bold", color: "#10b981", fontSize: "15px" }}>📅 {log.class_date}</span>
-                        <span style={{ fontSize: "13px", background: "#f1f5f9", padding: "4px 10px", borderRadius: "20px", color: "#475569" }}>{log.subject}</span>
-                    </div>
-                    {/* ★ 更新：如果在上課紀錄頁面，也顯示這堂課有額外費用 */}
-                    {log.expense > 0 && <div style={{fontSize: "13px", color: "#ec4899", fontWeight: "bold", marginBottom: "8px", display: "flex", alignItems: "center", gap: "4px"}}><DollarSign size={14}/> 雜費/書費: ${log.expense}</div>}
-                    
-                    <div style={{ fontSize: "16px", color: "#334155", marginBottom: "12px", lineHeight: "1.5" }}>{log.progress}</div>
-                    {(log.homework || log.note) && (
-                    <div style={{ background: "#f8fafc", padding: "12px", borderRadius: "10px", fontSize: "14px" }}>
-                        {log.homework && <div style={{ display: "flex", gap: "8px", marginBottom: log.note ? "8px" : "0" }}><BookOpen size={16} style={{ color: "#3b82f6", minWidth: "16px", marginTop: "2px" }} /><span style={{ color: "#475569" }}><b>作業：</b>{log.homework}</span></div>}
-                        {log.note && <div style={{ display: "flex", gap: "8px" }}><MessageSquare size={16} style={{ color: "#f59e0b", minWidth: "16px", marginTop: "2px" }} /><span style={{ color: "#475569" }}><b>備註：</b>{log.note}</span></div>}
-                    </div>
-                    )}
-                </div>
-                ))}
-            </div>
-        </div>
-      )}
-
-      {activeView === "grade" && (
-        <div style={{ animation: "fadeIn 0.3s ease" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
-                <h3 style={{...sectionTitleStyle, marginBottom: 0}}>📝 成績分析</h3>
-                {gradeFilter && <div style={{ fontSize: "14px", fontWeight: "bold", color: "#64748b", background: "#f1f5f9", padding: "5px 12px", borderRadius: "20px" }}>總平均：<span style={{ color: "#3b82f6", fontSize: "16px" }}>{currentAvg}</span> 分</div>}
-            </div>
-            <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "10px", marginBottom: "10px" }}>
-                {studentData.availableSubjects.map((sub: any) => (
-                    <button key={sub} onClick={() => setGradeFilter(sub)} style={filterBtnStyle(gradeFilter === sub)}>{sub}</button>
-                ))}
-            </div>
-            {currentChartData.length > 0 ? (
-                <div style={{ ...cardStyle, height: "250px", padding: "10px 10px 0 0", marginBottom: "20px" }}>
-                    <ResponsiveContainer width="100%" height={230}>
-                        <LineChart data={currentChartData}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="date" tick={{fontSize: 10}} /><YAxis domain={[0, 100]} tick={{fontSize: 10}} /><Tooltip /><Line type="monotone" dataKey="score" stroke="#3b82f6" strokeWidth={3} dot={{r:4}} /></LineChart>
-                    </ResponsiveContainer>
-                </div>
-            ) : <div style={{ ...emptyStyle, marginBottom: "20px" }}>尚無此科目成績</div>}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                {getFilteredGrades().map((g: any) => (
-                    <div key={g.id} style={{ ...cardStyle, textAlign: "center", padding: "15px", borderTop: "3px solid #cbd5e1" }}>
-                        <div style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "5px" }}>{g.exam_date}</div>
-                        <div style={{ fontSize: "14px", fontWeight: "bold", color: "#334155" }}>{g.subject}</div>
-                        <div style={{ fontSize: "24px", fontWeight: "bold", color: g.score >= 60 ? "#2563eb" : "#ef4444", margin: "5px 0" }}>{g.score}</div>
-                        <div style={{ fontSize: "12px", color: "#64748b" }}>{g.unit}</div>
-                    </div>
-                ))}
-            </div>
-        </div>
-      )}
-
-      {activeView === "tuition" && (
-        <div style={{ animation: "fadeIn 0.3s ease" }}>
-             <h3 style={sectionTitleStyle}>💰 本月學費明細</h3>
-             <div style={{ background: "linear-gradient(135deg, #ec4899 0%, #be185d 100%)", color: "white", padding: "30px", borderRadius: "20px", marginBottom: "25px", textAlign: "center", boxShadow: "0 10px 20px rgba(236, 72, 153, 0.2)" }}>
-                 <div style={{ fontSize: "14px", opacity: 0.9, marginBottom: "5px" }}>{currentMonth} 應繳總額</div>
-                 <div style={{ fontSize: "42px", fontWeight: "bold" }}>${tuitionTotal.toLocaleString()}</div>
-             </div>
-             <div style={{ background: "white", borderRadius: "16px", border: "1px solid #e2e8f0", overflow: "hidden" }}>
-                 <div style={{ padding: "15px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", fontWeight: "bold", fontSize: "14px", color: "#64748b" }}>計算明細 ({tuitionDetails.length} 筆)</div>
-                 {tuitionDetails.length > 0 ? tuitionDetails.map((item: any, idx: number) => (
-                     <div key={item.id} style={{ display: "flex", justifyContent: "space-between", padding: "15px", borderBottom: idx !== tuitionDetails.length - 1 ? "1px solid #f1f5f9" : "none" }}>
-                         <div>
-                             <div style={{ fontSize: "15px", fontWeight: "bold", color: "#334155" }}>{item.class_date} <span style={{fontSize: "12px", color: "#64748b", fontWeight: "normal"}}>({item.subject})</span></div>
-                             <div style={{ fontSize: "12px", color: "#94a3b8" }}>
-                                {item.duration} hr × ${item.rate}/hr
-                                {/* ★ 更新：如果這堂課有額外費用，顯示紅字明細 */}
-                                {item.extra > 0 && <span style={{color: "#ec4899", fontWeight: "bold", marginLeft: "5px"}}>+ 雜費 ${item.extra}</span>}
-                             </div>
-                         </div>
-                         <div style={{ fontWeight: "bold", color: "#be185d" }}>${item.fee}</div>
-                     </div>
-                 )) : <div style={{ padding: "30px", textAlign: "center", color: "#94a3b8" }}>本月尚無上課紀錄</div>}
-             </div>
-        </div>
-      )}
-
-      {activeView === "points" && (
-        <div style={{ animation: "fadeIn 0.3s ease" }}>
-            <h3 style={sectionTitleStyle}>💎 點數紀錄</h3>
-             <div style={{ background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)", color: "white", padding: "20px", borderRadius: "16px", marginBottom: "20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                 <div><div style={{ fontSize: "14px", opacity: 0.9 }}>目前累積</div><div style={{ fontSize: "28px", fontWeight: "bold" }}>{studentData.totalPoints} 點</div></div>
-                 <Award size={32} color="white" style={{ opacity: 0.8 }} />
-             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                {studentData.points.map((point: any) => (
-                <div key={point.id} style={{ ...cardStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div><div style={{ fontSize: "14px", color: "#64748b" }}>{new Date(point.created_at).toLocaleDateString()}</div><div style={{ fontSize: "16px", fontWeight: "bold", color: "#334155" }}>{point.reason}</div></div>
-                    <div style={{ fontSize: "20px", fontWeight: "bold", color: point.points > 0 ? "#10b981" : "#ef4444" }}>{point.points > 0 ? "+" : ""}{point.points}</div>
-                </div>
-                ))}
-                {studentData.points.length === 0 && <div style={emptyStyle}>目前無點數紀錄</div>}
-            </div>
-        </div>
-      )}
-
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "white", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "space-around", padding: "10px 0", zIndex: 100, maxWidth: "600px", margin: "auto", boxShadow: "0 -4px 6px -1px rgba(0,0,0,0.05)" }}>
-         <button onClick={() => setActiveView("home")} style={navBtnStyle(activeView === "home")}><Home size={22} /><span style={{fontSize: "11px", marginTop: "3px"}}>首頁</span></button>
-         <button onClick={() => setActiveView("class")} style={navBtnStyle(activeView === "class")}><BookOpen size={22} /><span style={{fontSize: "11px", marginTop: "3px"}}>上課</span></button>
-         <button onClick={() => setActiveView("grade")} style={navBtnStyle(activeView === "grade")}><TrendingUp size={22} /><span style={{fontSize: "11px", marginTop: "3px"}}>成績</span></button>
-         <button onClick={() => setActiveView("tuition")} style={navBtnStyle(activeView === "tuition")}><DollarSign size={22} /><span style={{fontSize: "11px", marginTop: "3px"}}>學費</span></button>
-         <button onClick={() => setActiveView("points")} style={navBtnStyle(activeView === "points")}><Coins size={22} /><span style={{fontSize: "11px", marginTop: "3px"}}>點數</span></button>
-      </div>
-
-      <style jsx>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+      <style jsx>{`
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        ::-webkit-scrollbar { width: 0px; background: transparent; }
+      `}</style>
     </div>
   );
 }
-
-const inputContainerStyle = { position: "relative" as const };
-const iconStyle = { position: "absolute" as const, left: "15px", top: "14px", color: "#94a3b8" };
-const inputStyle = { width: "100%", padding: "12px 12px 12px 45px", borderRadius: "12px", border: "1px solid #e2e8f0", background: "#f8fafc", fontSize: "16px", outline: "none", boxSizing: "border-box" as const };
-const btnStyle = { width: "100%", padding: "14px", background: "#1e3a8a", color: "white", border: "none", borderRadius: "12px", fontSize: "16px", fontWeight: "bold", cursor: "pointer", marginTop: "10px" };
-const sectionTitleStyle = { fontSize: "18px", color: "#1e293b", margin: "0 0 15px 0", fontWeight: "bold", borderLeft: "4px solid #1e3a8a", paddingLeft: "10px" };
-const cardStyle = { background: "white", padding: "20px", borderRadius: "16px", border: "1px solid #e2e8f0", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" };
-const menuCardStyle = { background: "white", padding: "20px", borderRadius: "16px", border: "1px solid #e2e8f0", boxShadow: "0 4px 6px rgba(0,0,0,0.02)", cursor: "pointer", transition: "transform 0.1s" };
-const emptyStyle = { textAlign: "center" as const, color: "#94a3b8", padding: "30px", background: "#f8fafc", borderRadius: "12px" };
-const filterBtnStyle = (active: boolean) => ({ padding: "6px 14px", borderRadius: "20px", border: active ? `1px solid #3b82f6` : "1px solid #e2e8f0", background: active ? "#3b82f6" : "white", color: active ? "white" : "#64748b", fontSize: "13px", cursor: "pointer", whiteSpace: "nowrap" as const, transition: "0.2s" });
-const navBtnStyle = (active: boolean) => ({ background: "transparent", border: "none", display: "flex", flexDirection: "column" as const, alignItems: "center", color: active ? "#1e3a8a" : "#94a3b8", cursor: "pointer", flex: 1, fontWeight: active ? "bold" : "normal" });
