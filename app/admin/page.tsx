@@ -146,13 +146,13 @@ export default function AdminPage() {
   const handleEditStudentClick = (s: any) => { setEditingStudentId(s.id); setNewStudentName(s.name); setNewStudentPassword(s.password); setNewStudentSchool(s.school || ""); window.scrollTo({ top: 0, behavior: 'smooth' }); };
 
   const handleDeleteStudent = async (id: number, name: string) => {
-    const confirmMsg = `❗【刪除警告】❗\n\n確定要永久刪除學生「${name}」的帳號嗎？\n\n注意：這將會移除學生的登入權限，此動作無法復原！`;
+    const confirmMsg = `❗【刪除警告】❗\n\n確定要永久刪除學生「${name}」的帳號嗎？\n\n此動作無法復原！`;
     if (!window.confirm(confirmMsg)) return;
     setLoading(true);
     const { error } = await supabase.from("students").delete().eq("id", id);
     setLoading(false);
     if (error) alert("刪除失敗: " + error.message);
-    else { alert("✅ 學生帳號已成功移除"); fetchStudents(); if (selectedName === name) setSelectedName(studentList[0]?.name || ""); }
+    else { alert("✅ 已移除"); fetchStudents(); if (selectedName === name) setSelectedName(studentList[0]?.name || ""); }
   };
 
   const fetchRates = async () => {
@@ -222,7 +222,7 @@ export default function AdminPage() {
     const { data: rates = [] } = await supabase.from("subject_rates").select("*").eq("student_name", selectedName);
     setLoading(false);
     setBillingText(""); 
-    if (!classes || classes.length === 0) { setTuitionDetails([]); return alert("⚠️ 本月無紀錄"); }
+    if (!classes || classes.length === 0) { setTuitionDetails([]); return alert("⚠️ 無紀錄"); }
     const rateMap: Record<string, number> = {};
     rates?.forEach(r => rateMap[r.subject] = r.rate);
     const details = classes.map(c => {
@@ -296,6 +296,10 @@ export default function AdminPage() {
       </div>
     </div>
   );
+
+  // ★ 關鍵修正：在這裡計算圖表與平均數，確保主渲染範圍能抓到
+  const currentChartData = getProcessedChartData();
+  const currentAvg = getSubjectAverage();
 
   return (
     <div style={{ ...globalContainerStyle, paddingBottom: "100px" }}>
@@ -420,7 +424,7 @@ export default function AdminPage() {
 
         {activeTab === "view" && (
           <div style={solidCardStyle}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}><h3 style={{color: theme.textMain, margin: 0, fontWeight: "900"}}>📊 單科成績分析</h3>{gradeFilter && <div style={{ fontSize: "14px", fontWeight: "bold", color: theme.textMain, background: theme.inputBg, border: `1px solid ${theme.border}`, padding: "8px 16px", borderRadius: "20px" }}>{gradeFilter}平均：<span style={{ color: COLORS[gradeFilter] || theme.primary, fontSize: "18px" }}>{currentAvg}</span> 分</div>}</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}><h3 style={{color: theme.textMain, margin: 0, fontWeight: "900"}}>📊 單科成績分析</h3>{gradeFilter && <div style={{ fontSize: "14px", fontWeight: "bold", color: theme.textMain, background: theme.inputBg, border: `1px solid ${theme.border}`, padding: "8px 16px", borderRadius: "20px", boxShadow: theme.shadow }}>{gradeFilter}平均：<span style={{ color: COLORS[gradeFilter] || theme.primary, fontSize: "18px" }}>{currentAvg}</span> 分</div>}</div>
             <div style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "15px", marginBottom: "15px" }}>{availableSubjects.map((sub: any) => <button key={sub} onClick={() => setGradeFilter(sub)} style={filterBtnStyle(gradeFilter === sub, COLORS[sub])}>{sub}</button>)}</div>
             {currentChartData.length > 0 ? (
               <div style={{ height: "320px", marginBottom: "40px" }}><ResponsiveContainer width="100%" height="100%"><LineChart data={currentChartData}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.border} /><XAxis dataKey="date" stroke={theme.border} tick={{fill: theme.textMuted, fontSize: 12}} /><YAxis domain={[0, 100]} stroke={theme.border} tick={{fill: theme.textMuted, fontSize: 12}} /><Tooltip contentStyle={{backgroundColor: theme.activeControl, borderColor: theme.border, color: theme.textMain, borderRadius: "12px"}} /><Legend /><Line type="monotone" dataKey="score" name={gradeFilter} stroke={COLORS[gradeFilter] || theme.primary} strokeWidth={4} dot={{ r: 6, fill: theme.activeControl, strokeWidth: 3 }} /></LineChart></ResponsiveContainer></div>
@@ -442,7 +446,7 @@ export default function AdminPage() {
               <HistoryList data={historyData} type={activeTab} theme={theme} isDarkMode={isDarkMode} onEdit={(item: any) => { setEditingId(item.id); if (activeTab === "class") { setProgress(item.progress); setClassDate(item.class_date); setSubject(item.subject); setDuration(item.duration); setHomework(item.homework || ""); setNote(item.note || ""); setExpense(item.expense || ""); } if (activeTab === "grade") { setScore(item.score); setExamDate(item.exam_date); setSubject(item.subject); setUnit(item.unit || ""); } if (activeTab === "point") { setPoints(item.points); setReason(item.reason); } window.scrollTo({ top: 0, behavior: 'smooth' }); }} onDelete={async (id: number, info: string) => { 
                 const table = activeTab === "class" ? "class_logs" : activeTab === "grade" ? "grades" : "point_logs";
                 const typeText = activeTab === "class" ? "上課紀錄" : activeTab === "grade" ? "成績紀錄" : "點數紀錄";
-                if (!window.confirm(`⚠️ 確定要刪除這筆「${typeText}」嗎？\n內容：${info}\n\n刪除後將無法復原！`)) return;
+                if (!window.confirm(`⚠️ 確定要刪除這筆「${typeText}」嗎？\n內容：${info}`)) return;
                 await supabase.from(table).delete().eq("id", id); 
                 fetchHistoryData(); 
               }} />
@@ -474,7 +478,7 @@ function HistoryList({ data, type, onEdit, onDelete, theme, isDarkMode }: Histor
           <div style={{ fontSize: "14px", flex: 1, color: theme.textMain }}>
             {type === "grade" ? (<span>🏷️ <b>{item.subject}</b>: {item.score}分 <span style={{color:theme.textMuted}}>({item.unit})</span> <span style={{color:theme.textMuted, fontSize:"12px"}}>({item.exam_date})</span></span>) 
             : type === "point" ? (<span>💎 {item.reason}: <b style={{color: item.points > 0 ? theme.success : theme.danger, fontSize: "18px"}}>{item.points} 點</b></span>) 
-            : (<div><div style={{fontWeight: "bold"}}>📂 {item.subject}: {item.progress} <span style={{color:theme.textMuted, fontWeight: "normal"}}>({item.class_date} | {item.duration} hr)</span></div>{item.expense > 0 && <div style={{fontSize: "13px", color: theme.danger, fontWeight: "900", marginTop: "6px", display: "flex", alignItems: "center", gap: "5px"}}><DollarSign size={14}/> 雜費: {item.expense}</div>}<div style={{ display: "flex", gap: "10px", marginTop: "10px", fontSize: "13px" }}>{item.homework && <span style={{display:"flex", alignItems:"center", gap: 5, background: isDarkMode ? "rgba(56,189,248,0.15)" : "#e0f2fe", padding: "4px 10px", borderRadius: "8px", color: theme.primary, fontWeight: "bold"}}><BookOpen size={14}/> {item.homework}</span>}{item.note && <span style={{display:"flex", alignItems:"center", gap: 5, background: isDarkMode ? "rgba(52,211,153,0.15)" : "#dcfce7", padding: "4px 10px", borderRadius: "8px", color: theme.success, fontWeight: "bold"}}><MessageSquare size={14}/> {item.note}</span>}</div></div>)}
+            : (<div><div style={{fontWeight: "bold"}}>📂 {item.subject}: {item.progress} <span style={{color:theme.textMuted, fontWeight: "normal"}}>({item.class_date} | {item.duration} hr)</span></div>{item.expense > 0 && <div style={{fontSize: "13px", color: theme.danger, fontWeight: "900", marginTop: "6px", display: "flex", alignItems: "center", gap: "4px"}}><DollarSign size={14}/> 雜費: {item.expense}</div>}<div style={{ display: "flex", gap: "10px", marginTop: "10px", fontSize: "13px" }}>{item.homework && <span style={{display:"flex", alignItems:"center", gap: 5, background: isDarkMode ? "rgba(56,189,248,0.15)" : "#e0f2fe", padding: "4px 10px", borderRadius: "8px", color: theme.primary, fontWeight: "bold"}}><BookOpen size={14}/> {item.homework}</span>}{item.note && <span style={{display:"flex", alignItems:"center", gap: 5, background: isDarkMode ? "rgba(52,211,153,0.15)" : "#dcfce7", padding: "4px 10px", borderRadius: "8px", color: theme.success, fontWeight: "bold"}}><MessageSquare size={14}/> {item.note}</span>}</div></div>)}
           </div>
           <div style={{ display: "flex", gap: "15px", marginLeft: "15px" }}>
             <button onClick={() => onEdit(item)} style={{ border: "none", background: "none", cursor: "pointer", color: theme.primary }}><Pencil size={20} /></button>
