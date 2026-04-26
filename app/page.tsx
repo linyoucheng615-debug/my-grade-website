@@ -60,16 +60,19 @@ export default function StudentPortal() {
   };
 
   const theme = {
-    bg: isDarkMode ? "#0f172a" : "#f8fafc",
+    bg: isDarkMode ? "linear-gradient(135deg, #0f172a 0%, #020617 100%)" : "linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)",
+    bodyBg: isDarkMode ? "#020617" : "#f1f5f9", 
     card: isDarkMode ? "#1e293b" : "#ffffff",
-    textMain: isDarkMode ? "#f1f5f9" : "#1e293b",
+    inputBg: isDarkMode ? "rgba(15, 23, 42, 0.6)" : "rgba(241, 245, 249, 0.6)",
+    textMain: isDarkMode ? "#f8fafc" : "#1e293b",
     textMuted: isDarkMode ? "#94a3b8" : "#64748b",
-    border: isDarkMode ? "#334155" : "#e2e8f0",
+    border: isDarkMode ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.04)",
     primary: isDarkMode ? "#38bdf8" : "#0ea5e9",
-    primaryLight: isDarkMode ? "rgba(56, 189, 248, 0.1)" : "#f0f9ff",
-    shadow: isDarkMode ? "0 10px 30px rgba(0,0,0,0.5)" : "0 10px 30px rgba(14, 165, 233, 0.08)",
-    navBg: isDarkMode ? "#1e293b" : "#ffffff",
-    inputBg: isDarkMode ? "#0f172a" : "#f8fafc",
+    danger: isDarkMode ? "#f87171" : "#ef4444",
+    success: isDarkMode ? "#34d399" : "#10b981",
+    pillBg: isDarkMode ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.03)",
+    navBg: isDarkMode ? "rgba(30, 41, 59, 0.85)" : "rgba(255, 255, 255, 0.85)",
+    shadow: isDarkMode ? "0 10px 40px rgba(0,0,0,0.5)" : "0 10px 40px rgba(14, 165, 233, 0.05)",
   };
 
   const fetchStudentData = async (name: string, password: string) => {
@@ -166,8 +169,9 @@ export default function StudentPortal() {
     return Math.round(sum / list.length);
   };
 
-  const globalContainerStyle = { minHeight: "100vh", background: theme.bg, transition: "background 0.3s ease", color: theme.textMain, fontFamily: "sans-serif" };
+  const globalContainerStyle = { minHeight: "100vh", background: theme.bg, transition: "background 0.5s ease", color: theme.textMain, fontFamily: "sans-serif" };
   
+  // ★ 修正點：再次恢復四個邊獨立宣告，避免 React 報錯
   const cardStyle = { 
     background: theme.card, 
     padding: "20px", 
@@ -177,14 +181,16 @@ export default function StudentPortal() {
     borderBottom: `1px solid ${theme.border}`,
     borderLeft: `1px solid ${theme.border}`,
     boxShadow: theme.shadow, 
-    transition: "0.3s ease" 
+    transition: "all 0.3s ease" 
   };
   
   const inputStyle = { width: "100%", padding: "14px 14px 14px 45px", borderRadius: "14px", border: `1px solid ${theme.border}`, background: theme.inputBg, color: theme.textMain, fontSize: "16px", outline: "none", boxSizing: "border-box" as const, transition: "0.3s" };
-  const filterBtnStyle = (active: boolean, colorStr: string = theme.primary) => ({ padding: "8px 16px", borderRadius: "20px", border: active ? `1px solid ${colorStr}` : `1px solid ${theme.border}`, background: active ? colorStr : theme.card, color: active ? "white" : theme.textMuted, fontSize: "13px", fontWeight: "bold", cursor: "pointer", whiteSpace: "nowrap" as const, transition: "all 0.2s" });
+  const filterBtnStyle = (active: boolean, colorStr: string = theme.primary) => ({ padding: "8px 18px", borderRadius: "20px", border: `1px solid ${active ? colorStr : theme.border}`, background: active ? colorStr : theme.inputBg, color: active ? "#ffffff" : theme.textMuted, fontSize: "13px", fontWeight: "bold", cursor: "pointer", whiteSpace: "nowrap" as const, transition: "all 0.2s ease", boxShadow: active ? `0 4px 12px ${colorStr}40` : "none" });
 
   if (!studentData) return (
     <div style={{ ...globalContainerStyle, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "20px" }}>
+      <style jsx global>{` body { background-color: ${theme.bodyBg}; margin: 0; transition: background-color 0.5s ease; } `}</style>
+      
       <button onClick={toggleTheme} style={{ position: "absolute", top: 20, right: 20, background: theme.card, border: `1px solid ${theme.border}`, padding: "10px", borderRadius: "50%", color: theme.textMain, cursor: "pointer", boxShadow: theme.shadow }}>{isDarkMode ? <Sun size={20} /> : <Moon size={20} />}</button>
       <div style={{ ...cardStyle, width: "100%", maxWidth: "360px", textAlign: "center" }}>
         <h1 style={{ color: theme.primary, fontSize: "28px", marginBottom: "10px", fontWeight: "900" }}>🎒 學習儀表板</h1>
@@ -198,10 +204,9 @@ export default function StudentPortal() {
             <Lock size={18} style={{ position: "absolute", left: "15px", top: "16px", color: theme.textMuted }} />
             <input type="password" placeholder="密碼 (預設 1234)" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} style={inputStyle} />
           </div>
-          <button type="submit" disabled={loading} style={{ width: "100%", padding: "14px", background: theme.primary, color: "white", border: "none", borderRadius: "14px", fontSize: "16px", fontWeight: "bold", cursor: "pointer", marginTop: "10px", transition: "0.2s" }}>{loading ? "讀取中..." : "登入"}</button>
+          <button type="submit" disabled={loading} style={{ width: "100%", padding: "14px", background: theme.primary, color: "#ffffff", border: "none", borderRadius: "14px", fontSize: "16px", fontWeight: "bold", cursor: "pointer", marginTop: "10px", transition: "0.2s", boxShadow: `0 4px 15px ${theme.primary}50` }}>{loading ? "讀取中..." : "登入"}</button>
         </form>
 
-        {/* 學生端的老師入口按鈕 */}
         <div style={{ marginTop: "25px", borderTop: `1px solid ${theme.border}`, paddingTop: "20px" }}>
            <button 
              onClick={() => window.location.href = '/admin'} 
@@ -221,6 +226,8 @@ export default function StudentPortal() {
 
   return (
     <div style={{ ...globalContainerStyle, paddingBottom: "100px" }}>
+      <style jsx global>{` body { background-color: ${theme.bodyBg}; margin: 0; transition: background-color 0.5s ease; } `}</style>
+
       <div style={{ maxWidth: "650px", margin: "auto", padding: "20px" }}>
         
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "30px" }}>
@@ -229,15 +236,16 @@ export default function StudentPortal() {
              <p style={{ margin: "5px 0 0 0", color: theme.textMuted, fontSize: "13px" }}>分數無法決定價值，只有你自己可以</p>
           </div>
           <div style={{ display: "flex", gap: "10px" }}>
-             <button onClick={toggleTheme} style={{ background: theme.card, border: `1px solid ${theme.border}`, padding: "10px", borderRadius: "50%", color: theme.textMain, cursor: "pointer", boxShadow: theme.shadow }}>{isDarkMode ? <Sun size={18} /> : <Moon size={18} />}</button>
-             <button onClick={handleLogout} style={{ background: theme.card, border: `1px solid ${theme.border}`, padding: "10px", borderRadius: "50%", color: "#ef4444", cursor: "pointer", boxShadow: theme.shadow }}><LogOut size={18} /></button>
+             <button onClick={toggleTheme} style={{ background: theme.card, border: `1px solid ${theme.border}`, padding: "10px", borderRadius: "50%", color: theme.textMain, cursor: "pointer", boxShadow: theme.shadow, transition: "0.2s" }}>{isDarkMode ? <Sun size={18} /> : <Moon size={18} />}</button>
+             <button onClick={handleLogout} style={{ background: theme.card, border: `1px solid ${theme.border}`, padding: "10px", borderRadius: "50%", color: theme.danger, cursor: "pointer", boxShadow: theme.shadow, transition: "0.2s" }}><LogOut size={18} /></button>
           </div>
         </div>
 
         {activeView === "home" && (
-          <div style={{ animation: "fadeIn 0.3s ease" }}>
+          <div style={{ animation: "fadeIn 0.4s ease" }}>
               <h3 style={{ fontSize: "18px", margin: "0 0 15px 0", fontWeight: "bold", color: theme.textMain }}>📌 快速功能導覽</h3>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
+                  {/* ★ 修正點：使用 borderWidth 和 borderColor 代替縮寫 */}
                   <div onClick={() => setActiveView("class")} style={{ ...cardStyle, cursor: "pointer", borderLeftWidth: "5px", borderLeftColor: COLORS["英文"] }}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}><div style={{ fontWeight: "bold", fontSize: "16px", color: theme.textMain }}>上課紀錄</div><Calendar size={20} color={COLORS["英文"]} /></div>
                       <div style={{ fontSize: "12px", color: theme.textMuted }}>追蹤作業與進度</div>
@@ -259,15 +267,15 @@ export default function StudentPortal() {
         )}
 
         {activeView === "class" && (
-          <div style={{ animation: "fadeIn 0.3s ease" }}>
+          <div style={{ animation: "fadeIn 0.4s ease" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
                   <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "bold", color: theme.textMain }}>📖 上課紀錄</h3>
               </div>
               
-              <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "15px", marginBottom: "10px", scrollbarWidth: "none" }}>
+              <div style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "15px", marginBottom: "10px", scrollbarWidth: "none" }}>
                   <div style={{display: "flex", alignItems: "center", color: theme.textMuted, marginRight: "5px"}}><Filter size={16}/></div>
                   {studentData.logSubjects.map((sub: string) => (
-                      <button key={sub} onClick={() => setLogFilter(sub)} style={filterBtnStyle(logFilter === sub, sub === "全部" ? theme.textMain : COLORS[sub])}>{sub}</button>
+                      <button key={sub} onClick={() => setLogFilter(sub)} style={filterBtnStyle(logFilter === sub, sub === "全部" ? theme.primary : COLORS[sub])}>{sub}</button>
                   ))}
               </div>
 
@@ -280,40 +288,39 @@ export default function StudentPortal() {
                       <div key={log.id} style={{ ...cardStyle, padding: "0", overflow: "hidden", borderLeftWidth: "6px", borderLeftColor: subColor }}>
                           <div 
                               onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
-                              style={{ padding: "18px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", background: isExpanded ? (isDarkMode ? "#1e293b" : "#f8fafc") : theme.card, transition: "0.2s" }}
+                              style={{ padding: "20px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", background: isExpanded ? theme.inputBg : theme.card, transition: "0.2s" }}
                           >
                               <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                                  <span style={{ fontSize: "13px", background: isDarkMode ? `${subColor}20` : `${subColor}15`, color: subColor, padding: "5px 12px", borderRadius: "8px", fontWeight: "bold" }}>{log.subject}</span>
+                                  <span style={{ fontSize: "13px", background: `${subColor}20`, color: subColor, padding: "6px 12px", borderRadius: "10px", fontWeight: "bold" }}>{log.subject}</span>
                                   <span style={{ fontWeight: "bold", color: theme.textMain, fontSize: "15px" }}>{log.class_date}</span>
                               </div>
                               {isExpanded ? <ChevronUp size={20} color={theme.textMuted}/> : <ChevronDown size={20} color={theme.textMuted}/>}
                           </div>
 
                           {isExpanded && (
-                              <div style={{ padding: "0 18px 18px 18px", background: isDarkMode ? "#1e293b" : "#f8fafc", animation: "fadeIn 0.2s ease" }}>
-                                  <div style={{ borderTop: `1px solid ${theme.border}`, paddingTop: "15px" }}>
-                                      {/* ★ 修正雙重錢字號 */}
-                                      {log.expense > 0 && <div style={{fontSize: "13px", color: "#ec4899", fontWeight: "bold", marginBottom: "10px", display: "flex", alignItems: "center", gap: "5px"}}><DollarSign size={14}/> 雜費: {log.expense}</div>}
+                              <div style={{ padding: "0 20px 20px 20px", background: theme.inputBg, animation: "fadeIn 0.3s ease" }}>
+                                  <div style={{ borderTop: `1px solid ${theme.border}`, paddingTop: "20px" }}>
+                                      {log.expense > 0 && <div style={{fontSize: "13px", color: theme.danger, fontWeight: "bold", marginBottom: "12px", display: "flex", alignItems: "center", gap: "5px"}}><DollarSign size={14}/> 雜費: {log.expense}</div>}
                                       
-                                      <div style={{ fontSize: "16px", color: theme.textMain, marginBottom: "15px", lineHeight: "1.6" }}>{log.progress}</div>
+                                      <div style={{ fontSize: "15px", color: theme.textMain, marginBottom: "15px", lineHeight: "1.7" }}>{log.progress}</div>
                                       
                                       {(log.homework || log.note) && (
-                                      <div style={{ background: theme.bg, padding: "15px", borderRadius: "12px", border: `1px solid ${theme.border}` }}>
+                                      <div style={{ background: theme.card, padding: "18px", borderRadius: "16px", border: `1px solid ${theme.border}`, boxShadow: "0 4px 15px rgba(0,0,0,0.02)" }}>
                                           {log.homework && (
                                               <div style={{ display: "flex", gap: "12px", marginBottom: log.note ? "15px" : "0", alignItems: "flex-start" }}>
-                                                  <div style={{ background: isDarkMode ? "rgba(14, 165, 233, 0.2)" : "#e0f2fe", padding: "8px", borderRadius: "10px" }}><BookOpen size={18} style={{ color: "#0ea5e9" }} /></div>
+                                                  <div style={{ background: theme.pillBg, padding: "10px", borderRadius: "12px" }}><BookOpen size={18} style={{ color: theme.primary }} /></div>
                                                   <div>
-                                                      <div style={{ fontSize: "12px", color: theme.textMuted, fontWeight: "bold", marginBottom: "3px" }}>回家作業</div>
-                                                      <div style={{ color: theme.textMain, fontSize: "15px", lineHeight: "1.4" }}>{log.homework}</div>
+                                                      <div style={{ fontSize: "12px", color: theme.textMuted, fontWeight: "bold", marginBottom: "4px" }}>回家作業</div>
+                                                      <div style={{ color: theme.textMain, fontSize: "14px", lineHeight: "1.5" }}>{log.homework}</div>
                                                   </div>
                                               </div>
                                           )}
                                           {log.note && (
                                               <div style={{ display: "flex", gap: "12px", alignItems: "flex-start", marginTop: log.homework ? "15px" : "0", paddingTop: log.homework ? "15px" : "0", borderTop: log.homework ? `1px dashed ${theme.border}` : "none" }}>
-                                                  <div style={{ background: isDarkMode ? "rgba(20, 184, 166, 0.2)" : "#ccfbf1", padding: "8px", borderRadius: "10px" }}><MessageSquare size={18} style={{ color: "#14b8a6" }} /></div>
+                                                  <div style={{ background: theme.pillBg, padding: "10px", borderRadius: "12px" }}><MessageSquare size={18} style={{ color: theme.success }} /></div>
                                                   <div>
-                                                      <div style={{ fontSize: "12px", color: theme.textMuted, fontWeight: "bold", marginBottom: "3px" }}>老師叮嚀</div>
-                                                      <div style={{ color: theme.textMain, fontSize: "15px", lineHeight: "1.4" }}>{log.note}</div>
+                                                      <div style={{ fontSize: "12px", color: theme.textMuted, fontWeight: "bold", marginBottom: "4px" }}>老師叮嚀</div>
+                                                      <div style={{ color: theme.textMain, fontSize: "14px", lineHeight: "1.5" }}>{log.note}</div>
                                                   </div>
                                               </div>
                                           )}
@@ -324,18 +331,18 @@ export default function StudentPortal() {
                           )}
                       </div>
                   )})}
-                  {getFilteredLogs().length === 0 && <div style={{textAlign: "center", padding: "30px", color: theme.textMuted}}>尚無紀錄</div>}
+                  {getFilteredLogs().length === 0 && <div style={{textAlign: "center", padding: "40px", color: theme.textMuted}}>尚無紀錄</div>}
               </div>
           </div>
         )}
 
         {activeView === "grade" && (
-          <div style={{ animation: "fadeIn 0.3s ease" }}>
+          <div style={{ animation: "fadeIn 0.4s ease" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
                   <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "bold", color: theme.textMain }}>📝 成績分析</h3>
-                  {gradeFilter && <div style={{ fontSize: "14px", fontWeight: "bold", color: theme.textMain, background: theme.card, border: `1px solid ${theme.border}`, padding: "6px 14px", borderRadius: "20px" }}>總平均：<span style={{ color: COLORS[gradeFilter] || theme.primary, fontSize: "16px" }}>{currentAvg}</span> 分</div>}
+                  {gradeFilter && <div style={{ fontSize: "14px", fontWeight: "bold", color: theme.textMain, background: theme.card, border: `1px solid ${theme.border}`, padding: "6px 14px", borderRadius: "20px", boxShadow: theme.shadow }}>總平均：<span style={{ color: COLORS[gradeFilter] || theme.primary, fontSize: "16px" }}>{currentAvg}</span> 分</div>}
               </div>
-              <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "10px", marginBottom: "15px" }}>
+              <div style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "10px", marginBottom: "15px" }}>
                   {studentData.availableSubjects.map((sub: any) => (
                       <button key={sub} onClick={() => setGradeFilter(sub)} style={filterBtnStyle(gradeFilter === sub, COLORS[sub])}>{sub}</button>
                   ))}
@@ -347,18 +354,18 @@ export default function StudentPortal() {
                               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.border} />
                               <XAxis dataKey="date" tick={{fontSize: 10, fill: theme.textMuted}} stroke={theme.border} />
                               <YAxis domain={[0, 100]} tick={{fontSize: 10, fill: theme.textMuted}} stroke={theme.border} />
-                              <Tooltip contentStyle={{backgroundColor: theme.card, borderColor: theme.border, color: theme.textMain, borderRadius: "10px"}} />
+                              <Tooltip contentStyle={{backgroundColor: theme.card, borderColor: theme.border, color: theme.textMain, borderRadius: "12px", boxShadow: theme.shadow}} itemStyle={{color: theme.textMain}} />
                               <Line type="monotone" dataKey="score" stroke={COLORS[gradeFilter] || theme.primary} strokeWidth={4} dot={{r:5, fill: theme.card, strokeWidth: 2}} />
                           </LineChart>
                       </ResponsiveContainer>
                   </div>
-              ) : <div style={{ textAlign: "center", color: theme.textMuted, padding: "30px", background: theme.card, borderRadius: "20px" }}>尚無成績資料</div>}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+              ) : <div style={{ textAlign: "center", color: theme.textMuted, padding: "40px", background: theme.card, borderRadius: "20px", border: `1px solid ${theme.border}` }}>尚無成績資料</div>}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
                   {getFilteredGrades().map((g: any) => (
                       <div key={g.id} style={{ ...cardStyle, textAlign: "center", padding: "20px", borderTopWidth: "4px", borderTopColor: COLORS[g.subject] || theme.primary }}>
                           <div style={{ fontSize: "12px", color: theme.textMuted, marginBottom: "8px" }}>{g.exam_date}</div>
                           <div style={{ fontSize: "15px", fontWeight: "bold", color: theme.textMain }}>{g.subject}</div>
-                          <div style={{ fontSize: "28px", fontWeight: "900", color: g.score >= 60 ? (COLORS[g.subject] || theme.primary) : "#ef4444", margin: "8px 0" }}>{g.score}</div>
+                          <div style={{ fontSize: "32px", fontWeight: "900", color: g.score >= 60 ? (COLORS[g.subject] || theme.primary) : theme.danger, margin: "10px 0" }}>{g.score}</div>
                           <div style={{ fontSize: "12px", color: theme.textMuted }}>{g.unit}</div>
                       </div>
                   ))}
@@ -367,64 +374,64 @@ export default function StudentPortal() {
         )}
 
         {activeView === "tuition" && (
-          <div style={{ animation: "fadeIn 0.3s ease" }}>
+          <div style={{ animation: "fadeIn 0.4s ease" }}>
                <h3 style={{ margin: "0 0 15px 0", fontSize: "18px", fontWeight: "bold", color: theme.textMain }}>💰 本月學費明細</h3>
-               <div style={{ background: `linear-gradient(135deg, ${theme.primary} 0%, #0369a1 100%)`, color: "white", padding: "35px 20px", borderRadius: "24px", marginBottom: "25px", textAlign: "center", boxShadow: "0 15px 30px rgba(14, 165, 233, 0.3)" }}>
+               <div style={{ background: `linear-gradient(135deg, ${theme.primary} 0%, #0284c7 100%)`, color: "#ffffff", padding: "40px 20px", borderRadius: "24px", marginBottom: "25px", textAlign: "center", boxShadow: `0 15px 35px ${theme.primary}40` }}>
                    <div style={{ fontSize: "15px", opacity: 0.9, marginBottom: "8px" }}>{currentMonth} 應繳總額</div>
-                   <div style={{ fontSize: "48px", fontWeight: "900", letterSpacing: "1px" }}>${tuitionTotal.toLocaleString()}</div>
+                   <div style={{ fontSize: "52px", fontWeight: "900", letterSpacing: "1px" }}>${tuitionTotal.toLocaleString()}</div>
                </div>
                <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
-                   <div style={{ padding: "18px", background: isDarkMode ? "#0f172a" : "#f8fafc", borderBottom: `1px solid ${theme.border}`, fontWeight: "bold", fontSize: "14px", color: theme.textMuted }}>計算明細 ({tuitionDetails.length} 筆)</div>
+                   <div style={{ padding: "20px", background: theme.inputBg, borderBottom: `1px solid ${theme.border}`, fontWeight: "bold", fontSize: "14px", color: theme.textMuted }}>計算明細 ({tuitionDetails.length} 筆)</div>
                    {tuitionDetails.length > 0 ? tuitionDetails.map((item: any, idx: number) => (
-                       <div key={item.id} style={{ display: "flex", justifyContent: "space-between", padding: "18px", borderBottom: idx !== tuitionDetails.length - 1 ? `1px solid ${theme.border}` : "none" }}>
+                       <div key={item.id} style={{ display: "flex", justifyContent: "space-between", padding: "20px", background: theme.card, borderBottom: idx !== tuitionDetails.length - 1 ? `1px solid ${theme.border}` : "none" }}>
                            <div>
                                <div style={{ fontSize: "15px", fontWeight: "bold", color: theme.textMain }}>{item.class_date} <span style={{fontSize: "12px", color: theme.textMuted, fontWeight: "normal"}}>({item.subject})</span></div>
-                               <div style={{ fontSize: "13px", color: theme.textMuted, marginTop: "4px" }}>
+                               <div style={{ fontSize: "13px", color: theme.textMuted, marginTop: "6px" }}>
                                   {item.duration} hr × ${item.rate}/hr
-                                  {item.extra > 0 && <span style={{color: "#ec4899", fontWeight: "bold", marginLeft: "6px"}}>+ 雜費 ${item.extra}</span>}
+                                  {item.extra > 0 && <span style={{color: theme.danger, fontWeight: "bold", marginLeft: "6px"}}>+ 雜費 {item.extra}</span>}
                                </div>
                            </div>
-                           <div style={{ fontWeight: "bold", color: theme.textMain, fontSize: "16px" }}>${item.fee}</div>
+                           <div style={{ fontWeight: "bold", color: theme.textMain, fontSize: "18px" }}>${item.fee}</div>
                        </div>
-                   )) : <div style={{ padding: "40px", textAlign: "center", color: theme.textMuted }}>本月尚無上課紀錄</div>}
+                   )) : <div style={{ padding: "40px", textAlign: "center", color: theme.textMuted, background: theme.card }}>本月尚無上課紀錄</div>}
                </div>
           </div>
         )}
 
         {activeView === "points" && (
-          <div style={{ animation: "fadeIn 0.3s ease" }}>
+          <div style={{ animation: "fadeIn 0.4s ease" }}>
               <h3 style={{ margin: "0 0 15px 0", fontSize: "18px", fontWeight: "bold", color: theme.textMain }}>💎 點數紀錄</h3>
-               <div style={{ background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)", color: "white", padding: "25px", borderRadius: "24px", marginBottom: "25px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 15px 30px rgba(245, 158, 11, 0.3)" }}>
-                   <div><div style={{ fontSize: "15px", opacity: 0.9, marginBottom: "5px" }}>目前累積</div><div style={{ fontSize: "36px", fontWeight: "900" }}>{studentData.totalPoints} <span style={{fontSize: "18px", fontWeight: "normal", opacity: 0.8}}>點</span></div></div>
-                   <Award size={48} color="white" style={{ opacity: 0.8 }} />
+               <div style={{ background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)", color: "#ffffff", padding: "30px", borderRadius: "24px", marginBottom: "25px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 15px 35px rgba(245, 158, 11, 0.4)" }}>
+                   <div><div style={{ fontSize: "15px", opacity: 0.9, marginBottom: "5px" }}>目前累積</div><div style={{ fontSize: "42px", fontWeight: "900" }}>{studentData.totalPoints} <span style={{fontSize: "20px", fontWeight: "normal", opacity: 0.8}}>點</span></div></div>
+                   <Award size={56} color="white" style={{ opacity: 0.8 }} />
                </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
                   {studentData.points.map((point: any) => (
-                  <div key={point.id} style={{ ...cardStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div key={point.id} style={{ ...cardStyle, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px" }}>
                       <div>
-                          <div style={{ fontSize: "13px", color: theme.textMuted, marginBottom: "4px" }}>{new Date(point.created_at).toLocaleDateString()}</div>
+                          <div style={{ fontSize: "13px", color: theme.textMuted, marginBottom: "6px" }}>{new Date(point.created_at).toLocaleDateString()}</div>
                           <div style={{ fontSize: "16px", fontWeight: "bold", color: theme.textMain }}>{point.reason}</div>
                       </div>
-                      <div style={{ fontSize: "22px", fontWeight: "900", color: point.points > 0 ? "#10b981" : "#ef4444" }}>{point.points > 0 ? "+" : ""}{point.points}</div>
+                      <div style={{ fontSize: "24px", fontWeight: "900", color: point.points > 0 ? theme.success : theme.danger }}>{point.points > 0 ? "+" : ""}{point.points}</div>
                   </div>
                   ))}
-                  {studentData.points.length === 0 && <div style={{textAlign: "center", color: theme.textMuted, padding: "30px"}}>目前無點數紀錄</div>}
+                  {studentData.points.length === 0 && <div style={{textAlign: "center", color: theme.textMuted, padding: "40px"}}>目前無點數紀錄</div>}
               </div>
           </div>
         )}
 
       </div>
       
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: theme.navBg, borderTop: `1px solid ${theme.border}`, display: "flex", justifyContent: "space-around", padding: "12px 0 20px 0", zIndex: 100, boxShadow: theme.shadow }}>
-         <button onClick={() => setActiveView("home")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "home" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "home" ? "bold" : "normal" }}><Home size={22} /><span style={{fontSize: "11px", marginTop: "4px"}}>首頁</span></button>
-         <button onClick={() => setActiveView("class")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "class" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "class" ? "bold" : "normal" }}><BookOpen size={22} /><span style={{fontSize: "11px", marginTop: "4px", whiteSpace: "nowrap"}}>上課紀錄</span></button>
-         <button onClick={() => setActiveView("grade")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "grade" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "grade" ? "bold" : "normal" }}><TrendingUp size={22} /><span style={{fontSize: "11px", marginTop: "4px"}}>成績</span></button>
-         <button onClick={() => setActiveView("tuition")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "tuition" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "tuition" ? "bold" : "normal" }}><DollarSign size={22} /><span style={{fontSize: "11px", marginTop: "4px"}}>帳單</span></button>
-         <button onClick={() => setActiveView("points")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "points" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "points" ? "bold" : "normal" }}><Coins size={22} /><span style={{fontSize: "11px", marginTop: "4px"}}>點數</span></button>
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: theme.navBg, backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderTop: `1px solid ${theme.border}`, display: "flex", justifyContent: "space-around", padding: "15px 0 25px 0", zIndex: 100, boxShadow: theme.shadow }}>
+         <button onClick={() => setActiveView("home")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "home" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "home" ? "bold" : "normal", transition: "0.2s", transform: activeView === "home" ? "scale(1.1)" : "scale(1)" }}><Home size={22} /><span style={{fontSize: "11px", marginTop: "6px"}}>首頁</span></button>
+         <button onClick={() => setActiveView("class")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "class" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "class" ? "bold" : "normal", transition: "0.2s", transform: activeView === "class" ? "scale(1.1)" : "scale(1)" }}><BookOpen size={22} /><span style={{fontSize: "11px", marginTop: "6px", whiteSpace: "nowrap"}}>上課紀錄</span></button>
+         <button onClick={() => setActiveView("grade")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "grade" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "grade" ? "bold" : "normal", transition: "0.2s", transform: activeView === "grade" ? "scale(1.1)" : "scale(1)" }}><TrendingUp size={22} /><span style={{fontSize: "11px", marginTop: "6px"}}>成績</span></button>
+         <button onClick={() => setActiveView("tuition")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "tuition" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "tuition" ? "bold" : "normal", transition: "0.2s", transform: activeView === "tuition" ? "scale(1.1)" : "scale(1)" }}><DollarSign size={22} /><span style={{fontSize: "11px", marginTop: "6px"}}>帳單</span></button>
+         <button onClick={() => setActiveView("points")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "points" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "points" ? "bold" : "normal", transition: "0.2s", transform: activeView === "points" ? "scale(1.1)" : "scale(1)" }}><Coins size={22} /><span style={{fontSize: "11px", marginTop: "6px"}}>點數</span></button>
       </div>
 
       <style jsx>{`
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         ::-webkit-scrollbar { width: 0px; background: transparent; }
       `}</style>
     </div>

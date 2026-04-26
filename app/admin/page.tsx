@@ -100,18 +100,24 @@ export default function AdminPage() {
     localStorage.setItem("teacherTheme", newTheme ? "dark" : "light");
   };
 
-  // ★ 修正 1：將老師端主題顏色完全對齊學生端的「淺藍色 (Sky Blue)」
   const theme = {
-    bg: isDarkMode ? "#0f172a" : "#f8fafc",
+    bg: isDarkMode ? "linear-gradient(135deg, #0f172a 0%, #020617 100%)" : "linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)",
+    bodyBg: isDarkMode ? "#020617" : "#f1f5f9",
     card: isDarkMode ? "#1e293b" : "#ffffff",
-    textMain: isDarkMode ? "#f1f5f9" : "#1e293b",
+    // ★ 關鍵紮實色：用於所有的主功能區塊
+    activeControl: isDarkMode ? "#0f172a" : "#ffffff", 
+    inputBg: isDarkMode ? "rgba(15, 23, 42, 0.6)" : "rgba(241, 245, 249, 0.6)",
+    textMain: isDarkMode ? "#f8fafc" : "#1e293b",
     textMuted: isDarkMode ? "#94a3b8" : "#64748b",
-    border: isDarkMode ? "#334155" : "#e2e8f0",
+    border: isDarkMode ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.04)",
+    // ★ 強化的邊框發光色
+    glowBorder: isDarkMode ? "rgba(56, 189, 248, 0.2)" : "rgba(14, 165, 233, 0.15)",
     primary: isDarkMode ? "#38bdf8" : "#0ea5e9",
-    primaryLight: isDarkMode ? "rgba(56, 189, 248, 0.1)" : "#f0f9ff",
-    shadow: isDarkMode ? "0 10px 30px rgba(0,0,0,0.5)" : "0 10px 30px rgba(14, 165, 233, 0.08)",
-    navBg: isDarkMode ? "#1e293b" : "#ffffff",
-    inputBg: isDarkMode ? "#0f172a" : "#f8fafc",
+    danger: isDarkMode ? "#f87171" : "#ef4444",
+    success: isDarkMode ? "#34d399" : "#10b981",
+    pillBg: isDarkMode ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.03)",
+    navBg: isDarkMode ? "rgba(30, 41, 59, 0.85)" : "rgba(255, 255, 255, 0.85)",
+    shadow: isDarkMode ? "0 10px 40px rgba(0,0,0,0.5)" : "0 8px 25px rgba(14, 165, 233, 0.08)",
   };
 
   const fetchStudents = async () => {
@@ -267,36 +273,31 @@ export default function AdminPage() {
     setTimeout(() => setIsCopied(false), 2000);
   };
 
-  const globalContainerStyle = { minHeight: "100vh", background: theme.bg, transition: "background 0.3s ease", color: theme.textMain, fontFamily: "sans-serif" };
+  const globalContainerStyle = { minHeight: "100vh", background: theme.bg, transition: "background 0.5s ease", color: theme.textMain, fontFamily: "sans-serif" };
   const inputStyle = { width: "100%", padding: "12px", margin: "6px 0", borderRadius: "10px", border: `1px solid ${theme.border}`, background: theme.inputBg, color: theme.textMain, boxSizing: "border-box" as const, transition: "0.2s" };
-  
-  // ★ 修正 2：新增登入專屬的 inputStyle，精準對齊學生端的框線圓角、左邊距與大小
   const loginInputStyle = { width: "100%", padding: "14px 14px 14px 45px", borderRadius: "14px", border: `1px solid ${theme.border}`, background: theme.inputBg, color: theme.textMain, fontSize: "16px", outline: "none", boxSizing: "border-box" as const, transition: "0.3s" };
-  
   const selectStyle = { ...inputStyle, cursor: "pointer" };
-  const formStyle = { background: theme.card, padding: "25px", borderRadius: "15px", border: `1px solid ${theme.border}`, marginBottom: "25px", boxShadow: theme.shadow, transition: "0.3s" };
   
-  const cardStyle = { 
-    background: theme.card, 
-    padding: "20px", 
+  // ★ 核心風格：統一的所有主功能卡片樣式
+  const solidCardStyle = { 
+    background: theme.activeControl, 
+    padding: "25px", 
     borderRadius: "20px", 
-    borderTop: `1px solid ${theme.border}`,
-    borderRight: `1px solid ${theme.border}`,
-    borderBottom: `1px solid ${theme.border}`,
-    borderLeft: `1px solid ${theme.border}`,
-    boxShadow: theme.shadow, 
+    border: `2px solid ${theme.glowBorder}`,
+    boxShadow: theme.shadow,
+    marginBottom: "25px",
     transition: "0.3s ease" 
   };
   
-  const btnStyle = (color: string) => ({ background: color, color: "#fff", border: "none", padding: "12px", borderRadius: "10px", cursor: "pointer", width: "100%", marginTop: "10px", fontWeight: "bold", transition: "0.2s" });
-  const getTabStyle = (active: boolean, color: string) => ({ flex: 1, padding: "12px", borderRadius: "10px", border: active ? `1px solid ${color}` : `1px solid ${theme.border}`, background: active ? color : theme.card, color: active ? "#fff" : theme.textMuted, fontWeight: "bold", cursor: "pointer", transition: "0.3s" });
-  const filterBtnStyle = (active: boolean, color: string = theme.textMain) => ({ padding: "6px 14px", borderRadius: "20px", border: active ? `1px solid ${color}` : `1px solid ${theme.border}`, background: active ? color : theme.card, color: active ? "white" : theme.textMuted, fontSize: "13px", cursor: "pointer", whiteSpace: "nowrap" as const, transition: "0.2s" });
+  const btnStyle = (color: string) => ({ background: color, color: "#ffffff", border: "none", padding: "12px", borderRadius: "10px", cursor: "pointer", width: "100%", marginTop: "10px", fontWeight: "bold", transition: "0.2s" });
+  const getTabStyle = (active: boolean, color: string) => ({ flex: 1, padding: "12px", borderRadius: "10px", border: active ? `1px solid ${color}` : `1px solid ${theme.border}`, background: active ? color : theme.inputBg, color: active ? "#fff" : theme.textMuted, fontWeight: "bold", cursor: "pointer", transition: "0.3s" });
+  const filterBtnStyle = (active: boolean, colorStr: string = theme.textMain) => ({ padding: "8px 16px", borderRadius: "20px", border: active ? `1px solid ${colorStr}` : `1px solid ${theme.border}`, background: active ? colorStr : theme.activeControl, color: active ? "#ffffff" : theme.textMuted, fontSize: "13px", fontWeight: "bold", cursor: "pointer", whiteSpace: "nowrap" as const, transition: "0.2s" });
 
-  // ★ 修正 3：登入畫面完全與學生端對齊 (包含寬度、副標題、圓角設定、hover效果)
   if (!currentTeacher) return (
     <div style={{ ...globalContainerStyle, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "20px" }}>
+      <style jsx global>{` body { background-color: ${theme.bodyBg}; margin: 0; transition: background-color 0.5s ease; } `}</style>
       <button onClick={toggleTheme} style={{ position: "absolute", top: 20, right: 20, background: theme.card, border: `1px solid ${theme.border}`, padding: "10px", borderRadius: "50%", color: theme.textMain, cursor: "pointer", boxShadow: theme.shadow }}>{isDarkMode ? <Sun size={20} /> : <Moon size={20} />}</button>
-      <div style={{ ...cardStyle, width: "100%", maxWidth: "360px", textAlign: "center" }}>
+      <div style={{ ...solidCardStyle, width: "100%", maxWidth: "360px", textAlign: "center" }}>
         <h1 style={{ color: theme.primary, fontSize: "28px", marginBottom: "10px", fontWeight: "900" }}>🍎 老師登入</h1>
         <p style={{ color: theme.textMuted, marginBottom: "30px", fontSize: "14px" }}>登入以進入教務管理控制台</p>
         <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
@@ -308,17 +309,10 @@ export default function AdminPage() {
               <Lock size={18} style={{ position: "absolute", left: "15px", top: "16px", color: theme.textMuted }} />
               <input type="password" placeholder="密碼" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} style={loginInputStyle} />
             </div>
-            <button type="submit" disabled={loading} style={{ width: "100%", padding: "14px", background: theme.primary, color: "white", border: "none", borderRadius: "14px", fontSize: "16px", fontWeight: "bold", cursor: "pointer", marginTop: "10px", transition: "0.2s" }}>{loading ? "登入中..." : "登入"}</button>
+            <button type="submit" disabled={loading} style={{ ...btnStyle(theme.primary), padding: "14px", borderRadius: "14px", fontSize: "16px" }}>{loading ? "登入中..." : "登入"}</button>
         </form>
         <div style={{ marginTop: "25px", borderTop: `1px solid ${theme.border}`, paddingTop: "20px" }}>
-           <button 
-             onClick={() => window.location.href = '/'} 
-             style={{ background: "transparent", color: theme.textMuted, border: "none", cursor: "pointer", fontSize: "14px", display: "flex", alignItems: "center", justifyContent: "center", width: "100%", gap: "8px", transition: "0.2s" }}
-             onMouseOver={(e) => e.currentTarget.style.color = theme.primary}
-             onMouseOut={(e) => e.currentTarget.style.color = theme.textMuted}
-           >
-             🎒 我是學生，切換至前台
-           </button>
+           <button onClick={() => window.location.href = '/'} style={{ background: "transparent", color: theme.textMuted, border: "none", cursor: "pointer", fontSize: "14px", display: "flex", alignItems: "center", justifyContent: "center", width: "100%", gap: "8px", transition: "0.2s" }}>🎒 我是學生，切換至前台</button>
         </div>
       </div>
     </div>
@@ -328,130 +322,97 @@ export default function AdminPage() {
   const currentAvg = getSubjectAverage();
 
   return (
-    <div style={{ ...globalContainerStyle, paddingBottom: "80px" }}>
+    <div style={{ ...globalContainerStyle, paddingBottom: "100px" }}>
+      <style jsx global>{` body { background-color: ${theme.bodyBg}; margin: 0; transition: background-color 0.5s ease; } `}</style>
       <div style={{ maxWidth: "850px", margin: "auto", padding: "20px" }}>
         
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "30px" }}>
-          <h1 style={{ fontSize: "26px", color: theme.textMain, fontWeight: "bold" }}>👩‍🏫 {currentTeacher.name}的控制台</h1>
+          <h1 style={{ fontSize: "26px", color: theme.textMain, fontWeight: "900" }}>👩‍🏫 {currentTeacher.name}的控制台</h1>
           <div style={{ display: "flex", gap: "10px" }}>
-             <button onClick={toggleTheme} style={{ background: theme.card, border: `1px solid ${theme.border}`, padding: "8px", borderRadius: "50%", color: theme.textMain, cursor: "pointer", boxShadow: theme.shadow }}>{isDarkMode ? <Sun size={18} /> : <Moon size={18} />}</button>
-             <button onClick={handleLogout} style={{ color: "#ef4444", border: "1px solid #ef4444", padding: "8px 16px", borderRadius: "10px", background: theme.card, cursor: "pointer", fontWeight: "bold", boxShadow: theme.shadow }}>登出</button>
+             <button onClick={toggleTheme} style={{ background: theme.activeControl, border: `1px solid ${theme.border}`, padding: "10px", borderRadius: "50%", color: theme.textMain, cursor: "pointer", boxShadow: theme.shadow }}>{isDarkMode ? <Sun size={18} /> : <Moon size={18} />}</button>
+             <button onClick={handleLogout} style={{ background: theme.activeControl, border: `1px solid ${theme.border}`, padding: "10px", borderRadius: "50%", color: theme.danger, cursor: "pointer", boxShadow: theme.shadow }}><LogOut size={18} /></button>
           </div>
         </div>
         
-        <div style={{ background: theme.inputBg, padding: "20px", borderRadius: "15px", marginBottom: "25px", border: `1px solid ${theme.border}`, boxShadow: theme.shadow }}>
-          <label style={{ fontWeight: "bold", display: "block", marginBottom: "10px", color: theme.textMain }}>👤 操作學生：</label>
-          <select value={selectedName} onChange={e => setSelectedName(e.target.value)} style={selectStyle}>
+        {/* 操作學生：Neumorphism 風格 */}
+        <div style={solidCardStyle}>
+          <label style={{ fontWeight: "900", display: "block", marginBottom: "12px", color: theme.primary, fontSize: "14px", letterSpacing: "1px" }}>👤 目前正在操作：</label>
+          <select value={selectedName} onChange={e => setSelectedName(e.target.value)} style={{ ...selectStyle, background: theme.inputBg, fontSize: "18px", fontWeight: "bold", color: theme.textMain, border: `1px solid ${theme.border}`, padding: "12px 15px" }}>
             {studentList.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
           </select>
         </div>
 
+        <div style={{ display: "flex", gap: "10px", marginBottom: "25px", flexWrap: "nowrap", overflowX: "auto", paddingBottom: "10px" }}>
+          <button onClick={() => setActiveTab("class")} style={getTabStyle(activeTab === "class", "#10b981")}>📚 上課</button>
+          <button onClick={() => setActiveTab("grade")} style={getTabStyle(activeTab === "grade", "#3b82f6")}>📝 成績</button>
+          <button onClick={() => setActiveTab("point")} style={getTabStyle(activeTab === "point", "#f59e0b")}>💎 點數</button>
+          <button onClick={() => setActiveTab("tuition")} style={getTabStyle(activeTab === "tuition", "#ec4899")}>💰 學費</button>
+          <button onClick={() => setActiveTab("view")} style={getTabStyle(activeTab === "view", "#8b5cf6")}>📊 報表</button>
+        </div>
+
         {activeTab === "class" && (
-          <form onSubmit={e => handleSubmit(e, "class")} style={formStyle}>
-            <h3 style={{color: theme.textMain}}>📚 新增上課進度</h3>
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 2fr 1fr", gap: "10px", alignItems: "center" }}>
-              <select value={subject} onChange={e => setSubject(e.target.value)} style={{...selectStyle, width: "100%"}}>
-                  {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-              <input type="date" value={classDate} onChange={e => setClassDate(e.target.value)} style={{...inputStyle, width: "100%"}} />
-              <div style={{position:"relative"}}>
-                   <input type="number" step="0.5" placeholder="時數" value={duration} onChange={e => setDuration(e.target.value)} style={{...inputStyle, width: "100%", textAlign: "center"}} />
-                   <span style={{position:"absolute", right: 8, top: 18, fontSize:12, color: theme.textMuted}}>hr</span>
-              </div>
+          <form onSubmit={e => handleSubmit(e, "class")} style={solidCardStyle}>
+            <h3 style={{color: theme.textMain, marginBottom: "20px"}}>📚 新增上課進度</h3>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 2fr 1fr", gap: "15px", marginBottom: "15px" }}>
+              <select value={subject} onChange={e => setSubject(e.target.value)} style={selectStyle}>{SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}</select>
+              <input type="date" value={classDate} onChange={e => setClassDate(e.target.value)} style={inputStyle} />
+              <div style={{position:"relative"}}><input type="number" step="0.5" placeholder="時數" value={duration} onChange={e => setDuration(e.target.value)} style={{...inputStyle, textAlign: "center"}} /><span style={{position:"absolute", right: 10, top: 18, fontSize:12, color: theme.textMuted}}>hr</span></div>
             </div>
-            <div style={{position:"relative", marginBottom: "10px"}}>
-               <DollarSign size={16} style={{position:"absolute", left:10, top:13, color:"#ec4899"}}/>
-               <input type="number" placeholder="額外費用 (書費/代購費，無則留空)" value={expense} onChange={e => setExpense(e.target.value)} style={{...inputStyle, paddingLeft: 35, borderColor: isDarkMode ? "#831843" : "#fbcfe8"}} />
-            </div>
+            <div style={{position:"relative", marginBottom: "15px"}}><DollarSign size={16} style={{position:"absolute", left:12, top:16, color:theme.danger}}/><input type="number" placeholder="額外費用 (書費/代購費，無則留空)" value={expense} onChange={e => setExpense(e.target.value)} style={{...inputStyle, paddingLeft: 40, border: `1px solid ${isDarkMode ? 'rgba(248,113,113,0.3)' : '#fecaca'}`}} /></div>
             <input type="text" placeholder="📝 本日進度" value={progress} onChange={e => setProgress(e.target.value)} style={inputStyle} />
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "10px" }}>
-               <input type="text" placeholder="🏠 作業" value={homework} onChange={e => setHomework(e.target.value)} style={inputStyle} />
-               <input type="text" placeholder="💡 備註" value={note} onChange={e => setNote(e.target.value)} style={inputStyle} />
-            </div>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "15px", marginTop: "10px" }}><input type="text" placeholder="🏠 作業" value={homework} onChange={e => setHomework(e.target.value)} style={inputStyle} /><input type="text" placeholder="💡 備註" value={note} onChange={e => setNote(e.target.value)} style={inputStyle} /></div>
             <button type="submit" style={btnStyle("#10b981")}>儲存紀錄</button>
           </form>
         )}
 
         {activeTab === "grade" && (
-          <form onSubmit={e => handleSubmit(e, "grade")} style={formStyle}>
-            <h3 style={{color: theme.textMain}}>📝 成績輸入</h3>
-            <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: "10px" }}>
-              <select value={subject} onChange={e => setSubject(e.target.value)} style={selectStyle}>{SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}</select>
-              <input type="date" value={examDate} onChange={e => setExamDate(e.target.value)} style={inputStyle} />
-            </div>
-            <input type="text" placeholder="📖 考試範圍 / 單元 (如: 第一課)" value={unit} onChange={e => setUnit(e.target.value)} style={inputStyle} />
+          <form onSubmit={e => handleSubmit(e, "grade")} style={solidCardStyle}>
+            <h3 style={{color: theme.textMain, marginBottom: "20px"}}>📝 成績輸入</h3>
+            <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: "15px", marginBottom: "10px" }}><select value={subject} onChange={e => setSubject(e.target.value)} style={selectStyle}>{SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}</select><input type="date" value={examDate} onChange={e => setExamDate(e.target.value)} style={inputStyle} /></div>
+            <input type="text" placeholder="📖 考試範圍 / 單元" value={unit} onChange={e => setUnit(e.target.value)} style={inputStyle} />
             <input type="number" placeholder="分數" value={score} onChange={e => setScore(e.target.value)} style={inputStyle} />
             <button type="submit" style={btnStyle("#3b82f6")}>儲存成績</button>
           </form>
         )}
 
         {activeTab === "point" && (
-          <form onSubmit={e => handleSubmit(e, "point")} style={formStyle}>
-            <h3 style={{color: theme.textMain}}>💎 點數獎勵</h3>
-            <input type="number" placeholder="點數" value={points} onChange={e => setPoints(e.target.value)} style={inputStyle} />
-            <input type="text" placeholder="原因" value={reason} onChange={e => setReason(e.target.value)} style={inputStyle} />
+          <form onSubmit={e => handleSubmit(e, "point")} style={solidCardStyle}>
+            <h3 style={{color: theme.textMain, marginBottom: "20px"}}>💎 點數獎勵</h3>
+            <input type="number" placeholder="點數" value={points} onChange={e => setPoints(e.target.value)} style={inputStyle} /><input type="text" placeholder="原因" value={reason} onChange={e => setReason(e.target.value)} style={inputStyle} />
             <button type="submit" style={btnStyle("#f59e0b")}>送出</button>
           </form>
         )}
 
         {activeTab === "tuition" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "25px" }}>
-            <div style={formStyle}>
-              <h3 style={{color: theme.textMain}}>💰 薪資學費試算</h3>
-              
-              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
-                <input type="month" value={tuitionMonth} onChange={e => setTuitionMonth(e.target.value)} style={{...inputStyle, width: "auto", flex: 1, minWidth: "120px"}} />
-                <button onClick={handleTuitionCheck} style={{...btnStyle("#ec4899"), width: "auto", marginTop: 0, padding: "10px 20px", whiteSpace: "nowrap"}}>計算</button>
-                <button onClick={generateBillingText} style={{...btnStyle("#4f46e5"), width: "auto", marginTop: 0, padding: "10px 20px", display: "flex", alignItems: "center", gap: "5px", whiteSpace: "nowrap"}}><FileText size={18} /> 生成明細</button>
-              </div>
-              
+            <div style={solidCardStyle}>
+              <h3 style={{color: theme.textMain, marginBottom: "20px"}}>💰 薪資學費試算</h3>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}><input type="month" value={tuitionMonth} onChange={e => setTuitionMonth(e.target.value)} style={{...inputStyle, width: "auto", flex: 1, minWidth: "140px"}} /><button onClick={handleTuitionCheck} style={{...btnStyle(theme.danger), width: "auto", marginTop: 0, padding: "12px 24px", whiteSpace: "nowrap"}}>計算</button><button onClick={generateBillingText} style={{...btnStyle("#6366f1"), width: "auto", marginTop: 0, padding: "12px 24px", display: "flex", alignItems: "center", gap: "8px", whiteSpace: "nowrap"}}><FileText size={18} /> 生成明細</button></div>
               {billingText && (
-                <div style={{ marginTop: "20px", position: "relative", animation: "fadeIn 0.3s ease" }}>
-                  <label style={{fontWeight: "bold", color: "#6366f1", marginBottom: "5px", display: "block"}}>👇 複製以下內容傳給家長：</label>
-                  <textarea 
-                    value={billingText} 
-                    onChange={(e) => setBillingText(e.target.value)}
-                    style={{ width: "100%", height: "200px", padding: "15px", borderRadius: "10px", border: `2px solid ${isDarkMode ? "#4338ca" : "#6366f1"}`, fontSize: "14px", fontFamily: "monospace", resize: "none", background: isDarkMode ? "#1e1b4b" : "#f5f3ff", color: theme.textMain }}
-                  />
-                  <button onClick={copyToClipboard} style={{ position: "absolute", top: "35px", right: "10px", background: isCopied ? "#10b981" : theme.border, color: isCopied ? "white" : theme.textMain, border: "none", padding: "6px 12px", borderRadius: "6px", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", transition: "0.2s" }}>
-                    {isCopied ? <Check size={14}/> : <Copy size={14}/>} {isCopied ? "已複製" : "複製"}
-                  </button>
+                <div style={{ marginTop: "25px", position: "relative", animation: "fadeIn 0.3s ease" }}>
+                  <label style={{fontWeight: "bold", color: "#6366f1", marginBottom: "8px", display: "block"}}>👇 複製傳給家長：</label>
+                  <textarea value={billingText} onChange={(e) => setBillingText(e.target.value)} style={{ width: "100%", height: "220px", padding: "18px", borderRadius: "16px", border: `2px solid ${isDarkMode ? "#4338ca" : "#6366f1"}`, fontSize: "14px", fontFamily: "monospace", resize: "none", background: isDarkMode ? "#1e1b4b" : "#f5f3ff", color: theme.textMain, lineHeight: "1.6" }} />
+                  <button onClick={copyToClipboard} style={{ position: "absolute", top: "40px", right: "12px", background: isCopied ? theme.success : theme.card, color: isCopied ? "white" : theme.textMain, border: `1px solid ${theme.border}`, padding: "8px 16px", borderRadius: "8px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", transition: "0.2s", boxShadow: theme.shadow }}>{isCopied ? <Check size={14}/> : <Copy size={14}/>} {isCopied ? "已複製" : "複製"}</button>
                 </div>
               )}
-
               {tuitionDetails.length > 0 && (
-                <div style={{ marginTop: "20px", borderTop: `2px dashed ${isDarkMode ? "#831843" : "#ec4899"}`, paddingTop: "15px" }}>
-                  <div style={{ fontSize: "14px", color: theme.textMuted, marginBottom: "10px" }}>計算結果明細：</div>
+                <div style={{ marginTop: "25px", borderTop: `2px dashed ${theme.border}`, paddingTop: "20px" }}>
                   {tuitionDetails.map(t => (
-                    <div key={t.id} style={{ display: "flex", justifyContent: "space-between", padding: "12px", background: theme.inputBg, borderRadius: "10px", marginBottom: "8px", border: `1px solid ${theme.border}` }}>
-                      <div>
-                          <div style={{fontWeight: "bold", fontSize: "15px", color: theme.textMain}}>{t.class_date} <span style={{fontSize: "13px", fontWeight: "normal", color: theme.textMuted}}>({t.subject})</span></div>
-                          <div style={{fontSize: "12px", color: theme.textMuted}}>
-                              {t.duration} hr × ${t.rate}/hr 
-                              {t.extra > 0 && <span style={{color: "#ec4899", fontWeight: "bold"}}> + 書費 ${t.extra}</span>}
-                          </div>
-                      </div>
-                      <span style={{ fontWeight: "bold", color: "#ec4899", display: "flex", alignItems: "center" }}>${t.total}</span>
+                    <div key={t.id} style={{ display: "flex", justifyContent: "space-between", padding: "15px", background: theme.inputBg, borderRadius: "14px", marginBottom: "10px", border: `1px solid ${theme.border}` }}>
+                      <div><div style={{fontWeight: "900", fontSize: "15px", color: theme.textMain}}>{t.class_date} <span style={{fontSize: "12px", color: theme.textMuted, fontWeight: "normal"}}>({t.subject})</span></div><div style={{fontSize: "13px", color: theme.textMuted, marginTop: "4px"}}>{t.duration} hr × ${t.rate}/hr {t.extra > 0 && <span style={{color: theme.danger, fontWeight: "bold"}}> + 雜費 {t.extra}</span>}</div></div>
+                      <span style={{ fontWeight: "900", color: theme.danger, display: "flex", alignItems: "center", fontSize: "18px" }}>${t.total}</span>
                     </div>
                   ))}
-                  <div style={{ textAlign: "right", fontSize: "24px", fontWeight: "bold", marginTop: "15px", color: "#be185d", borderTop: `2px solid ${theme.border}`, paddingTop: "10px" }}>
-                      總計：${tuitionDetails.reduce((a,b)=>a+b.total,0).toLocaleString()}
-                  </div>
+                  <div style={{ textAlign: "right", fontSize: "28px", fontWeight: "900", marginTop: "20px", color: theme.danger, borderTop: `2px solid ${theme.border}`, paddingTop: "15px" }}>總計：${tuitionDetails.reduce((a,b)=>a+b.total,0).toLocaleString()}</div>
                 </div>
               )}
             </div>
-
-            <div style={{ ...formStyle, background: theme.inputBg }}>
-              <h3 style={{color: theme.textMain}}>⚙️ 設定分科時薪 ({selectedName})</h3>
-              <div key={selectedName} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "10px" }}>
+            <div style={solidCardStyle}>
+              <h3 style={{color: theme.textMain, marginBottom: "20px"}}>⚙️ 設定分科時薪 ({selectedName})</h3>
+              <div key={selectedName} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "12px" }}>
                 {SUBJECTS.map(sub => {
                   const currentRate = subjectRates.find(r => r.subject === sub)?.rate || 0;
-                  return (
-                    <div key={sub} style={{ display: "flex", alignItems: "center", gap: "8px", background: theme.card, padding: "10px", borderRadius: "10px", border: `1px solid ${theme.border}` }}>
-                      <span style={{ fontSize: "14px", fontWeight: "bold", color: theme.textMain }}>{sub}</span>
-                      <input type="number" defaultValue={currentRate} onBlur={e => updateSubjectRate(sub, Number(e.target.value))} style={{ width: "100%", padding: "5px", borderRadius: "5px", border: `1px solid ${theme.border}`, background: theme.inputBg, color: theme.textMain }} />
-                    </div>
-                  )
+                  return (<div key={sub} style={{ display: "flex", alignItems: "center", gap: "10px", background: theme.inputBg, padding: "12px", borderRadius: "12px", border: `1px solid ${theme.border}` }}><span style={{ fontSize: "14px", fontWeight: "bold", color: theme.textMain }}>{sub}</span><input type="number" defaultValue={currentRate} onBlur={e => updateSubjectRate(sub, Number(e.target.value))} style={{ width: "100%", padding: "8px", borderRadius: "8px", border: `1px solid ${theme.border}`, background: theme.activeControl, color: theme.textMain, textAlign: "center" }} /></div>)
                 })}
               </div>
             </div>
@@ -459,79 +420,40 @@ export default function AdminPage() {
         )}
 
         {activeTab === "view" && (
-          <div style={cardStyle}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
-               <h3 style={{color: theme.textMain, margin: 0}}>📊 單科成績分析</h3>
-               {gradeFilter && <div style={{ fontSize: "14px", fontWeight: "bold", color: theme.textMain, background: theme.inputBg, border: `1px solid ${theme.border}`, padding: "5px 12px", borderRadius: "20px" }}>{gradeFilter}平均：<span style={{ color: COLORS[gradeFilter] || theme.primary, fontSize: "16px" }}>{currentAvg}</span> 分</div>}
-            </div>
-            <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "10px", marginBottom: "10px" }}>
-               {availableSubjects.map((sub: any) => <button key={sub} onClick={() => setGradeFilter(sub)} style={filterBtnStyle(gradeFilter === sub, COLORS[sub])}>{sub}</button>)}
-               {availableSubjects.length === 0 && <span style={{fontSize:"14px", color:theme.textMuted}}>該學生尚無成績資料</span>}
-            </div>
+          <div style={solidCardStyle}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}><h3 style={{color: theme.textMain, margin: 0, fontWeight: "900"}}>📊 單科成績分析</h3>{gradeFilter && <div style={{ fontSize: "14px", fontWeight: "bold", color: theme.textMain, background: theme.inputBg, border: `1px solid ${theme.border}`, padding: "8px 16px", borderRadius: "20px" }}>{gradeFilter}平均：<span style={{ color: COLORS[gradeFilter] || theme.primary, fontSize: "18px" }}>{currentAvg}</span> 分</div>}</div>
+            <div style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "15px", marginBottom: "15px" }}>{availableSubjects.map((sub: any) => <button key={sub} onClick={() => setGradeFilter(sub)} style={filterBtnStyle(gradeFilter === sub, COLORS[sub])}>{sub}</button>)}</div>
             {currentChartData.length > 0 ? (
-              <div style={{ height: "300px", marginTop: "20px", marginBottom: "30px" }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={currentChartData}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.border} />
-                    <XAxis dataKey="date" stroke={theme.border} tick={{fill: theme.textMuted}} />
-                    <YAxis domain={[0, 100]} stroke={theme.border} tick={{fill: theme.textMuted}} />
-                    <Tooltip contentStyle={{backgroundColor: theme.card, borderColor: theme.border, color: theme.textMain}} />
-                    <Legend />
-                    <Line type="monotone" dataKey="score" name={gradeFilter} stroke={COLORS[gradeFilter] || theme.primary} strokeWidth={3} dot={{ r: 5, fill: theme.card, strokeWidth: 2 }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            ) : <div style={{ height: "200px", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textMuted }}>尚無圖表數據</div>}
-            
-            <h4 style={{ color: theme.textMuted, margin: "0 0 10px 0" }}>📜 詳細成績列表</h4>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "10px" }}>
+              <div style={{ height: "320px", marginBottom: "40px" }}><ResponsiveContainer width="100%" height="100%"><LineChart data={currentChartData}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.border} /><XAxis dataKey="date" stroke={theme.border} tick={{fill: theme.textMuted, fontSize: 12}} /><YAxis domain={[0, 100]} stroke={theme.border} tick={{fill: theme.textMuted, fontSize: 12}} /><Tooltip contentStyle={{backgroundColor: theme.activeControl, borderColor: theme.border, color: theme.textMain, borderRadius: "12px"}} /><Legend /><Line type="monotone" dataKey="score" name={gradeFilter} stroke={COLORS[gradeFilter] || theme.primary} strokeWidth={4} dot={{ r: 6, fill: theme.activeControl, strokeWidth: 3 }} /></LineChart></ResponsiveContainer></div>
+            ) : <div style={{ height: "200px", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textMuted, border: `1px dashed ${theme.border}`, borderRadius: "20px" }}>尚無數據</div>}
+            <h4 style={{ color: theme.textMuted, margin: "0 0 15px 0", fontWeight: "bold" }}>📜 詳細成績列表</h4>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "15px" }}>
                {getFilteredGrades().map((g: any) => (
-                   <div key={g.id} style={{ background: theme.inputBg, textAlign: "center", padding: "15px", borderRadius: "12px", borderTop: `4px solid ${COLORS[g.subject] || theme.border}`, borderRight: `1px solid ${theme.border}`, borderBottom: `1px solid ${theme.border}`, borderLeft: `1px solid ${theme.border}` }}>
-                       <div style={{ fontSize: "12px", color: theme.textMuted, marginBottom: "5px" }}>{g.exam_date}</div>
-                       <div style={{ fontSize: "14px", fontWeight: "bold", color: theme.textMain }}>{g.subject}</div>
-                       <div style={{ fontSize: "24px", fontWeight: "bold", color: g.score >= 60 ? (COLORS[g.subject] || theme.primary) : "#ef4444", margin: "5px 0" }}>{g.score}</div>
-                       <div style={{ fontSize: "12px", color: theme.textMuted }}>{g.unit}</div>
-                   </div>
+                   <div key={g.id} style={{ background: theme.inputBg, textAlign: "center", padding: "20px", borderRadius: "16px", borderTop: `4px solid ${COLORS[g.subject] || theme.border}`, borderRight: `1px solid ${theme.border}`, borderBottom: `1px solid ${theme.border}`, borderLeft: `1px solid ${theme.border}` }}><div style={{ fontSize: "12px", color: theme.textMuted, marginBottom: "6px" }}>{g.exam_date}</div><div style={{ fontSize: "15px", fontWeight: "bold", color: theme.textMain }}>{g.subject}</div><div style={{ fontSize: "32px", fontWeight: "900", color: g.score >= 60 ? theme.primary : theme.danger, margin: "8px 0" }}>{g.score}</div><div style={{ fontSize: "12px", color: theme.textMuted }}>{g.unit}</div></div>
                ))}
             </div>
           </div>
         )}
 
         {activeTab !== "view" && activeTab !== "tuition" && (
-          <>
+          <div style={{ animation: "fadeIn 0.4s ease" }}>
               {(activeTab === "class" || activeTab === "grade") && (
-                  <div style={{ marginTop: "30px", marginBottom: "10px", display: "flex", alignItems: "center", gap: "10px", padding: "10px", background: theme.inputBg, borderRadius: "10px", border: `1px solid ${theme.border}` }}>
-                      <Filter size={16} color={theme.textMuted} />
-                      <span style={{ fontSize: "14px", color: theme.textMuted, fontWeight: "bold" }}>篩選歷史紀錄：</span>
-                      <select value={historyFilter} onChange={e => setHistoryFilter(e.target.value)} style={{ ...selectStyle, width: "auto", padding: "8px", margin: 0 }}><option value="全部">全部顯示</option>{SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}</select>
-                  </div>
+                  <div style={{ ...solidCardStyle, padding: "12px 20px", display: "flex", alignItems: "center", gap: "12px" }}><Filter size={16} color={theme.textMuted} /><span style={{ fontSize: "14px", color: theme.textMuted, fontWeight: "bold" }}>紀錄篩選：</span><select value={historyFilter} onChange={e => setHistoryFilter(e.target.value)} style={{ ...selectStyle, width: "auto", padding: "6px 12px", margin: 0, background: theme.inputBg, fontSize: "13px" }}><option value="全部">全部顯示</option>{SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
               )}
-              <HistoryList data={historyData} type={activeTab} theme={theme} isDarkMode={isDarkMode} onEdit={(item: any) => {
-                setEditingId(item.id);
-                if (activeTab === "class") { 
-                    setProgress(item.progress); setClassDate(item.class_date); setSubject(item.subject); setDuration(item.duration); setHomework(item.homework || ""); setNote(item.note || "");
-                    setExpense(item.expense || "");
-                }
-                if (activeTab === "grade") { setScore(item.score); setExamDate(item.exam_date); setSubject(item.subject); setUnit(item.unit || ""); }
-                if (activeTab === "point") { setPoints(item.points); setReason(item.reason); }
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }} onDelete={async (id: number) => {
-                if (!confirm("⚠️ 確定刪除嗎？")) return;
-                const table = activeTab === "class" ? "class_logs" : activeTab === "grade" ? "grades" : "point_logs";
-                await supabase.from(table).delete().eq("id", id);
-                fetchHistoryData(); 
-              }} />
-          </>
+              <HistoryList data={historyData} type={activeTab} theme={theme} isDarkMode={isDarkMode} onEdit={(item: any) => { setEditingId(item.id); if (activeTab === "class") { setProgress(item.progress); setClassDate(item.class_date); setSubject(item.subject); setDuration(item.duration); setHomework(item.homework || ""); setNote(item.note || ""); setExpense(item.expense || ""); } if (activeTab === "grade") { setScore(item.score); setExamDate(item.exam_date); setSubject(item.subject); setUnit(item.unit || ""); } if (activeTab === "point") { setPoints(item.points); setReason(item.reason); } window.scrollTo({ top: 0, behavior: 'smooth' }); }} onDelete={async (id: number) => { if (!confirm("⚠️ 確定刪除嗎？")) return; const table = activeTab === "class" ? "class_logs" : activeTab === "grade" ? "grades" : "point_logs"; await supabase.from(table).delete().eq("id", id); fetchHistoryData(); }} />
+          </div>
         )}
       </div>
 
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: theme.navBg, borderTop: `1px solid ${theme.border}`, display: "flex", justifyContent: "space-around", padding: "12px 0 20px 0", zIndex: 100, boxShadow: theme.shadow }}>
-         <button onClick={() => setActiveTab("class")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeTab === "class" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeTab === "class" ? "bold" : "normal" }}><BookOpen size={22} /><span style={{fontSize: "11px", marginTop: "4px"}}>上課</span></button>
-         <button onClick={() => setActiveTab("grade")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeTab === "grade" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeTab === "grade" ? "bold" : "normal" }}><TrendingUp size={22} /><span style={{fontSize: "11px", marginTop: "4px"}}>成績</span></button>
-         <button onClick={() => setActiveTab("point")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeTab === "point" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeTab === "point" ? "bold" : "normal" }}><Coins size={22} /><span style={{fontSize: "11px", marginTop: "4px"}}>點數</span></button>
-         <button onClick={() => setActiveTab("tuition")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeTab === "tuition" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeTab === "tuition" ? "bold" : "normal" }}><DollarSign size={22} /><span style={{fontSize: "11px", marginTop: "4px"}}>帳單</span></button>
-         <button onClick={() => setActiveTab("view")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeTab === "view" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeTab === "view" ? "bold" : "normal" }}><FileText size={22} /><span style={{fontSize: "11px", marginTop: "4px"}}>報表</span></button>
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: theme.navBg, backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderTop: `1px solid ${theme.border}`, display: "flex", justifyContent: "space-around", padding: "15px 0 25px 0", zIndex: 100, boxShadow: theme.shadow }}>
+         <button onClick={() => setActiveTab("class")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeTab === "class" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeTab === "class" ? "bold" : "normal", transition: "0.2s" }}><BookOpen size={22} /><span style={{fontSize: "11px", marginTop: "6px"}}>上課</span></button>
+         <button onClick={() => setActiveTab("grade")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeTab === "grade" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeTab === "grade" ? "bold" : "normal", transition: "0.2s" }}><TrendingUp size={22} /><span style={{fontSize: "11px", marginTop: "6px"}}>成績</span></button>
+         <button onClick={() => setActiveTab("point")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeTab === "point" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeTab === "point" ? "bold" : "normal", transition: "0.2s" }}><Coins size={22} /><span style={{fontSize: "11px", marginTop: "6px"}}>點數</span></button>
+         <button onClick={() => setActiveTab("tuition")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeTab === "tuition" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeTab === "tuition" ? "bold" : "normal", transition: "0.2s" }}><DollarSign size={22} /><span style={{fontSize: "11px", marginTop: "6px"}}>帳單</span></button>
+         <button onClick={() => setActiveTab("view")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeTab === "view" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeTab === "view" ? "bold" : "normal", transition: "0.2s" }}><FileText size={22} /><span style={{fontSize: "11px", marginTop: "6px"}}>報表</span></button>
       </div>
+
+      <style jsx>{` @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } ::-webkit-scrollbar { width: 0px; background: transparent; } `}</style>
     </div>
   );
 }
@@ -540,30 +462,15 @@ function HistoryList({ data, type, onEdit, onDelete, theme, isDarkMode }: Histor
   return (
     <div style={{ marginTop: "10px" }}>
       {data.length > 0 ? data.map((item) => (
-        <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: theme.card, padding: "15px", borderRadius: "12px", border: `1px solid ${theme.border}`, marginBottom: "10px", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
+        <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: theme.activeControl, padding: "18px", borderRadius: "16px", border: `1px solid ${theme.border}`, marginBottom: "12px", boxShadow: theme.shadow }}>
           <div style={{ fontSize: "14px", flex: 1, color: theme.textMain }}>
-            {type === "grade" ? (
-                <span>🏷️ <b>{item.subject}</b>: {item.score}分 <span style={{color:theme.textMuted}}>({item.unit})</span> <span style={{color:theme.textMuted, fontSize:"12px"}}>({item.exam_date})</span></span>
-            ) : type === "point" ? (
-                <span>💎 {item.reason}: <b style={{color: item.points > 0 ? "#10b981" : "#ef4444"}}>{item.points}點</b></span>
-            ) : (
-                <div>
-                   <div>📂 <b>{item.subject}</b>: {item.progress} <span style={{color:theme.textMuted}}>({item.class_date} | {item.duration} hr)</span></div>
-                   {item.expense > 0 && <div style={{fontSize: "13px", color: "#ec4899", fontWeight: "bold", marginTop: "6px", display: "flex", alignItems: "center", gap: "4px"}}><DollarSign size={14}/> 雜費: {item.expense}</div>}
-                   
-                   <div style={{ display: "flex", gap: "12px", marginTop: "8px", fontSize: "13px", color: theme.textMuted }}>
-                      {item.homework && <span style={{display:"flex", alignItems:"center", gap:4, background: isDarkMode ? "#1e3a8a30" : "#dbeafe", padding: "4px 8px", borderRadius: "6px", color: isDarkMode ? "#60a5fa" : "#2563eb"}}><BookOpen size={14}/> {item.homework}</span>}
-                      {item.note && <span style={{display:"flex", alignItems:"center", gap:4, background: isDarkMode ? "#14b8a630" : "#ccfbf1", padding: "4px 8px", borderRadius: "6px", color: isDarkMode ? "#2dd4bf" : "#0d9488"}}><MessageSquare size={14}/> {item.note}</span>}
-                   </div>
-                </div>
-            )}
+            {type === "grade" ? (<span>🏷️ <b>{item.subject}</b>: {item.score}分 <span style={{color:theme.textMuted}}>({item.unit})</span> <span style={{color:theme.textMuted, fontSize:"12px"}}>({item.exam_date})</span></span>) 
+            : type === "point" ? (<span>💎 {item.reason}: <b style={{color: item.points > 0 ? theme.success : theme.danger, fontSize: "18px"}}>{item.points} 點</b></span>) 
+            : (<div><div style={{fontWeight: "bold"}}>📂 {item.subject}: {item.progress} <span style={{color:theme.textMuted, fontWeight: "normal"}}>({item.class_date} | {item.duration} hr)</span></div>{item.expense > 0 && <div style={{fontSize: "13px", color: theme.danger, fontWeight: "900", marginTop: "6px", display: "flex", alignItems: "center", gap: "5px"}}><DollarSign size={14}/> 雜費: {item.expense}</div>}<div style={{ display: "flex", gap: "10px", marginTop: "10px", fontSize: "13px" }}>{item.homework && <span style={{display:"flex", alignItems:"center", gap:5, background: isDarkMode ? "rgba(56,189,248,0.15)" : "#e0f2fe", padding: "4px 10px", borderRadius: "8px", color: theme.primary, fontWeight: "bold"}}><BookOpen size={14}/> {item.homework}</span>}{item.note && <span style={{display:"flex", alignItems:"center", gap:5, background: isDarkMode ? "rgba(52,211,153,0.15)" : "#dcfce7", padding: "4px 10px", borderRadius: "8px", color: theme.success, fontWeight: "bold"}}><MessageSquare size={14}/> {item.note}</span>}</div></div>)}
           </div>
-          <div style={{ display: "flex", gap: "15px", marginLeft: "10px" }}>
-            <button onClick={() => onEdit(item)} style={{ border: "none", background: "none", cursor: "pointer", color: theme.primary }}><Pencil size={18} /></button>
-            <button onClick={() => onDelete(item.id)} style={{ border: "none", background: "none", cursor: "pointer", color: "#ef4444" }}><Trash2 size={18} /></button>
-          </div>
+          <div style={{ display: "flex", gap: "15px", marginLeft: "15px" }}><button onClick={() => onEdit(item)} style={{ border: "none", background: "none", cursor: "pointer", color: theme.primary }}><Pencil size={20} /></button><button onClick={() => onDelete(item.id)} style={{ border: "none", background: "none", cursor: "pointer", color: theme.danger }}><Trash2 size={20} /></button></div>
         </div>
-      )) : <p style={{ textAlign: "center", color: theme.textMuted, padding: "20px" }}>尚無資料 ✨</p>}
+      )) : <p style={{ textAlign: "center", color: theme.textMuted, padding: "30px", border: `1px dashed ${theme.border}`, borderRadius: "20px" }}>尚無資料 ✨</p>}
     </div>
   );
 }
