@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { User, Lock, BookOpen, MessageSquare, DollarSign, TrendingUp, Home, Calendar, Award, LogOut, Coins, FileText, ChevronDown, ChevronUp, Sun, Moon, Filter } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { User, Lock, BookOpen, MessageSquare, DollarSign, TrendingUp, Home, Calendar, Award, LogOut, Coins, FileText, ChevronDown, ChevronUp, Sun, Moon, Filter, Bell, Clock, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
 import { createClient } from '@supabase/supabase-js';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -15,6 +15,8 @@ const COLORS: Record<string, string> = {
   "歷史": "#6366f1", "地理": "#14b8a6", "公民": "#f97316"
 };
 
+const WEEK_DAYS = ["日", "一", "二", "三", "四", "五", "六"];
+
 export default function StudentPortal() {
   const [loginName, setLoginName] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -27,10 +29,13 @@ export default function StudentPortal() {
   
   const [activeView, setActiveView] = useState("home");
   const [gradeFilter, setGradeFilter] = useState("");
-  
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [logFilter, setLogFilter] = useState("全部");
   const [expandedLogId, setExpandedLogId] = useState<number | null>(null);
+
+  const [calendarEvents, setCalendarEvents] = useState<any[]>([]);
+  const [calYear, setCalYear] = useState(new Date().getFullYear());
+  const [calMonth, setCalMonth] = useState(new Date().getMonth());
 
   useEffect(() => {
     const savedLogin = localStorage.getItem("studentLogin");
@@ -77,7 +82,6 @@ export default function StudentPortal() {
 
   const fetchStudentData = async (name: string, password: string) => {
     setLoading(true);
-
     const { data: student } = await supabase.from("students").select("*")
       .eq("name", name.trim()).eq("password", password.trim()).single();
     
@@ -93,6 +97,9 @@ export default function StudentPortal() {
     const { data: grades } = await supabase.from("grades").select("*").eq("student_name", student.name).order("exam_date", { ascending: false });
     const { data: points } = await supabase.from("point_logs").select("*").eq("student_name", student.name).order("created_at", { ascending: false });
     const { data: rates } = await supabase.from("subject_rates").select("*").eq("student_name", student.name);
+
+    const { data: manualEvents } = await supabase.from("calendar_events").select("*").or(`student_name.eq.${student.name},student_name.eq.全體`);
+    setCalendarEvents(manualEvents || []);
 
     let totalFee = 0;
     let tDetails: any[] = [];
@@ -144,85 +151,84 @@ export default function StudentPortal() {
     setActiveView("home");
   };
 
-  const getFilteredGrades = () => {
-    if (!studentData || !gradeFilter) return [];
-    return studentData.grades.filter((g: any) => g.subject === gradeFilter);
+  // ★ 核心升級：精準讀取每週重複的單日排除清單 (Exception)
+  const getEventsForDate = (dateStr: string) => {
+    const currentCellDate = new Date(dateStr);
+    const dayOfWeek = currentCellDate.getDay(); 
+
+    const activeManualEvents = calendarEvents.filter(ev => {
+      const start = ev.event_date;
+      if (!ev.is_recurring) {
+        const end = ev.end_date || ev.event_date;
+        return dateStr >= start && dateStr <= end;
+      }
+      if (ev.is_recurring && ev.recurring_pattern === 'weekly') {
+        if (dateStr < start) return false;
+        if (ev.recurring_end_date && dateStr > ev.recurring_end_date) return false;
+        return dayOfWeek === new Date(start).getDay();
+      }
+      return false;
+    });
+
+    const isCancelledDay = activeManualEvents.some(ev => ev.type === 'cancellation');
+    const dayEvents: any[] = [];
+
+    if (!isCancelledDay && studentData?.info?.weekly_schedule) {
+        const fixedClasses = studentData.info.weekly_schedule.filter((item: any) => item.day === dayOfWeek);
+        fixedClasses.forEach((c: any) => {
+            dayEvents.push({ title: `${c.subject} (固定)`, time: c.time, type: 'class', isCancelled: false });
+        });
+    }
+
+    activeManualEvents.filter(ev => ev.type !== 'cancellation').forEach(ev => {
+        const isSingleCancelled = ev.cancelled_dates?.includes(dateStr);
+        let timeStr = "";
+        if (ev.start_time) {
+            timeStr = ev.end_time ? `${ev.start_time}~${ev.end_time}` : ev.start_time;
+        }
+        dayEvents.push({ title: ev.title, type: ev.type, time: timeStr, isCancelled: isSingleCancelled });
+    });
+
+    activeManualEvents.filter(ev => ev.type === 'cancellation').forEach(ev => {
+         dayEvents.push({ title: ev.title || '停課', type: 'cancellation', isCancelled: true });
+    });
+
+    return dayEvents;
   };
 
-  const getFilteredLogs = () => {
-    if (!studentData) return [];
-    if (logFilter === "全部") return studentData.classLogs;
-    return studentData.classLogs.filter((log: any) => log.subject === logFilter);
-  };
-
-  const getChartData = () => {
-    const list = getFilteredGrades();
-    if (list.length === 0) return [];
-    const sortedList = [...list].sort((a, b) => new Date(a.exam_date).getTime() - new Date(b.exam_date).getTime());
-    return sortedList.map((g: any) => ({ date: g.exam_date, score: g.score, subject: g.subject }));
-  };
-
-  const getSubjectAverage = () => {
-    const list = getFilteredGrades();
-    if (list.length === 0) return 0;
-    const sum = list.reduce((acc: number, curr: any) => acc + curr.score, 0);
-    return Math.round(sum / list.length);
-  };
-
-  const globalContainerStyle = { minHeight: "100vh", background: theme.bg, transition: "background 0.5s ease", color: theme.textMain, fontFamily: "sans-serif" };
-  
-  // ★ 修正點：再次恢復四個邊獨立宣告，避免 React 報錯
-  const cardStyle = { 
-    background: theme.card, 
-    padding: "20px", 
-    borderRadius: "20px", 
-    borderTop: `1px solid ${theme.border}`,
-    borderRight: `1px solid ${theme.border}`,
-    borderBottom: `1px solid ${theme.border}`,
-    borderLeft: `1px solid ${theme.border}`,
-    boxShadow: theme.shadow, 
-    transition: "all 0.3s ease" 
-  };
-  
-  const inputStyle = { width: "100%", padding: "14px 14px 14px 45px", borderRadius: "14px", border: `1px solid ${theme.border}`, background: theme.inputBg, color: theme.textMain, fontSize: "16px", outline: "none", boxSizing: "border-box" as const, transition: "0.3s" };
-  const filterBtnStyle = (active: boolean, colorStr: string = theme.primary) => ({ padding: "8px 18px", borderRadius: "20px", border: `1px solid ${active ? colorStr : theme.border}`, background: active ? colorStr : theme.inputBg, color: active ? "#ffffff" : theme.textMuted, fontSize: "13px", fontWeight: "bold", cursor: "pointer", whiteSpace: "nowrap" as const, transition: "all 0.2s ease", boxShadow: active ? `0 4px 12px ${colorStr}40` : "none" });
+  const globalContainerStyle: React.CSSProperties = { minHeight: "100vh", background: theme.bg, transition: "background 0.5s ease", color: theme.textMain, fontFamily: "sans-serif" };
+  const cardStyle: React.CSSProperties = { background: theme.card, padding: "20px", borderRadius: "20px", borderTop: `1px solid ${theme.border}`, borderRight: `1px solid ${theme.border}`, borderBottom: `1px solid ${theme.border}`, borderLeft: `1px solid ${theme.border}`, boxShadow: theme.shadow, transition: "all 0.3s ease" };
+  const inputStyle: React.CSSProperties = { width: "100%", padding: "14px 14px 14px 45px", borderRadius: "14px", border: `1px solid ${theme.border}`, background: theme.inputBg, color: theme.textMain, fontSize: "16px", outline: "none", boxSizing: "border-box", transition: "0.3s" };
+  const filterBtnStyle = (active: boolean, colorStr: string = theme.primary): React.CSSProperties => ({ padding: "8px 18px", borderRadius: "20px", border: `1px solid ${active ? colorStr : theme.border}`, background: active ? colorStr : theme.inputBg, color: active ? "#ffffff" : theme.textMuted, fontSize: "13px", fontWeight: "bold", cursor: "pointer", whiteSpace: "nowrap", transition: "all 0.2s ease", boxShadow: active ? `0 4px 12px ${colorStr}40` : "none" });
 
   if (!studentData) return (
     <div style={{ ...globalContainerStyle, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "20px" }}>
       <style jsx global>{` body { background-color: ${theme.bodyBg}; margin: 0; transition: background-color 0.5s ease; } `}</style>
-      
       <button onClick={toggleTheme} style={{ position: "absolute", top: 20, right: 20, background: theme.card, border: `1px solid ${theme.border}`, padding: "10px", borderRadius: "50%", color: theme.textMain, cursor: "pointer", boxShadow: theme.shadow }}>{isDarkMode ? <Sun size={20} /> : <Moon size={20} />}</button>
       <div style={{ ...cardStyle, width: "100%", maxWidth: "360px", textAlign: "center" }}>
         <h1 style={{ color: theme.primary, fontSize: "28px", marginBottom: "10px", fontWeight: "900" }}>🎒 學習儀表板</h1>
         <p style={{ color: theme.textMuted, marginBottom: "30px", fontSize: "14px" }}>登入以查詢專屬進度與成績</p>
         <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-          <div style={{ position: "relative" }}>
-            <User size={18} style={{ position: "absolute", left: "15px", top: "16px", color: theme.textMuted }} />
-            <input type="text" placeholder="學生姓名" value={loginName} onChange={e => setLoginName(e.target.value)} style={inputStyle} />
-          </div>
-          <div style={{ position: "relative" }}>
-            <Lock size={18} style={{ position: "absolute", left: "15px", top: "16px", color: theme.textMuted }} />
-            <input type="password" placeholder="密碼 (預設 1234)" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} style={inputStyle} />
-          </div>
+          <div style={{ position: "relative" }}><User size={18} style={{ position: "absolute", left: "15px", top: "16px", color: theme.textMuted }} /><input type="text" placeholder="學生姓名" value={loginName} onChange={e => setLoginName(e.target.value)} style={inputStyle} /></div>
+          <div style={{ position: "relative" }}><Lock size={18} style={{ position: "absolute", left: "15px", top: "16px", color: theme.textMuted }} /><input type="password" placeholder="密碼 (預設 1234)" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} style={inputStyle} /></div>
           <button type="submit" disabled={loading} style={{ width: "100%", padding: "14px", background: theme.primary, color: "#ffffff", border: "none", borderRadius: "14px", fontSize: "16px", fontWeight: "bold", cursor: "pointer", marginTop: "10px", transition: "0.2s", boxShadow: `0 4px 15px ${theme.primary}50` }}>{loading ? "讀取中..." : "登入"}</button>
         </form>
-
         <div style={{ marginTop: "25px", borderTop: `1px solid ${theme.border}`, paddingTop: "20px" }}>
-           <button 
-             onClick={() => window.location.href = '/admin'} 
-             style={{ background: "transparent", color: theme.textMuted, border: "none", cursor: "pointer", fontSize: "14px", display: "flex", alignItems: "center", justifyContent: "center", width: "100%", gap: "8px", transition: "0.2s" }}
-             onMouseOver={(e) => e.currentTarget.style.color = theme.primary}
-             onMouseOut={(e) => e.currentTarget.style.color = theme.textMuted}
-           >
-             👨‍🏫 我是老師，切換至後台
-           </button>
+           <button onClick={() => window.location.href = '/admin'} style={{ background: "transparent", color: theme.textMuted, border: "none", cursor: "pointer", fontSize: "14px", display: "flex", alignItems: "center", justifyContent: "center", width: "100%", gap: "8px", transition: "0.2s" }} onMouseOver={(e) => e.currentTarget.style.color = theme.primary} onMouseOut={(e) => e.currentTarget.style.color = theme.textMuted}>👨‍🏫 我是老師，切換至後台</button>
         </div>
       </div>
     </div>
   );
 
-  const currentChartData = getChartData();
-  const currentAvg = getSubjectAverage();
+  const firstDayIndex = new Date(calYear, calMonth, 1).getDay();
+  const totalDays = new Date(calYear, calMonth + 1, 0).getDate();
+  const blanks = Array(firstDayIndex).fill(null);
+  const daysInMonth = Array.from({ length: totalDays }, (_, i) => i + 1);
+  const calendarCells = [...blanks, ...daysInMonth];
+
+  const getFilteredGrades = () => studentData.grades.filter((g: any) => g.subject === gradeFilter);
+  const currentChartData = [...getFilteredGrades()].reverse().map((g: any) => ({ date: g.exam_date, score: g.score }));
+  const currentAvg = Math.round(getFilteredGrades().reduce((acc:any, curr:any) => acc + curr.score, 0) / (getFilteredGrades().length || 1));
 
   return (
     <div style={{ ...globalContainerStyle, paddingBottom: "100px" }}>
@@ -244,10 +250,9 @@ export default function StudentPortal() {
         {activeView === "home" && (
           <div style={{ animation: "fadeIn 0.4s ease" }}>
               <h3 style={{ fontSize: "18px", margin: "0 0 15px 0", fontWeight: "bold", color: theme.textMain }}>📌 快速功能導覽</h3>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
-                  {/* ★ 修正點：使用 borderWidth 和 borderColor 代替縮寫 */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px", marginBottom: "30px" }}>
                   <div onClick={() => setActiveView("class")} style={{ ...cardStyle, cursor: "pointer", borderLeftWidth: "5px", borderLeftColor: COLORS["英文"] }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}><div style={{ fontWeight: "bold", fontSize: "16px", color: theme.textMain }}>上課紀錄</div><Calendar size={20} color={COLORS["英文"]} /></div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}><div style={{ fontWeight: "bold", fontSize: "16px", color: theme.textMain }}>上課紀錄</div><BookOpen size={20} color={COLORS["英文"]} /></div>
                       <div style={{ fontSize: "12px", color: theme.textMuted }}>追蹤作業與進度</div>
                   </div>
                   <div onClick={() => setActiveView("grade")} style={{ ...cardStyle, cursor: "pointer", borderLeftWidth: "5px", borderLeftColor: COLORS["數學"] }}>
@@ -263,9 +268,67 @@ export default function StudentPortal() {
                       <div style={{ fontSize: "12px", color: theme.textMuted }}>累積: {studentData.totalPoints} 點</div>
                   </div>
               </div>
+
+              {/* 互動式 Google 行事曆 */}
+              <div style={{ ...cardStyle, padding: "20px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+                      <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "900", display: "flex", alignItems: "center", gap: "8px", color: theme.textMain }}>
+                          <Calendar size={20} color={theme.primary} /> 🗓️ 專屬行事曆
+                      </h3>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <span style={{ fontWeight: "bold", fontSize: "15px", color: theme.textMain }}>{calYear} 年 {calMonth + 1} 月</span>
+                          <div style={{ display: "flex", gap: "5px" }}>
+                              <button onClick={() => { if (calMonth === 0) { setCalMonth(11); setCalYear(calYear - 1); } else { setCalMonth(calMonth - 1); } }} style={{ background: theme.inputBg, border: "none", padding: "6px 10px", borderRadius: "8px", color: theme.textMain, cursor: "pointer" }}><ChevronLeft size={16} /></button>
+                              <button onClick={() => { setCalYear(new Date().getFullYear()); setCalMonth(new Date().getMonth()); }} style={{ background: theme.inputBg, border: "none", padding: "6px 12px", borderRadius: "8px", fontSize: "12px", color: theme.textMain, fontWeight: "bold", cursor: "pointer" }}>今天</button>
+                              <button onClick={() => { if (calMonth === 11) { setCalMonth(0); setCalYear(calYear + 1); } else { setCalMonth(calMonth + 1); } }} style={{ background: theme.inputBg, border: "none", padding: "6px 10px", borderRadius: "8px", color: theme.textMain, cursor: "pointer" }}><ChevronRight size={16} /></button>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", textAlign: "center", marginBottom: "10px", fontWeight: "bold", fontSize: "12px", color: theme.textMuted }}>
+                      {WEEK_DAYS.map(d => <div key={d} style={{ padding: "5px 0" }}>{d}</div>)}
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "6px" }}>
+                      {calendarCells.map((day, idx) => {
+                          if (day === null) return <div key={`blank-${idx}`} style={{ minHeight: "75px", background: "transparent" }} />;
+                          
+                          const monthStr = String(calMonth + 1).padStart(2, '0');
+                          const dayStr = String(day).padStart(2, '0');
+                          const dateKey = `${calYear}-${monthStr}-${dayStr}`;
+                          const dayEvents = getEventsForDate(dateKey);
+                          const isToday = new Date().toISOString().slice(0, 10) === dateKey;
+
+                          return (
+                              <div key={dateKey} style={{ minHeight: "75px", background: theme.inputBg, borderRadius: "12px", padding: "6px", display: "flex", flexDirection: "column", gap: "4px", border: isToday ? `2px solid ${theme.primary}` : `1px solid ${theme.border}` }}>
+                                  <div style={{ display: "flex", justifyContent: "center" }}>
+                                      <span style={{ fontSize: "12px", fontWeight: "bold", width: "20px", height: "20px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%", background: isToday ? theme.primary : "transparent", color: isToday ? "#ffffff" : theme.textMain }}>
+                                          {day}
+                                      </span>
+                                  </div>
+                                  <div style={{ display: "flex", flexDirection: "column", gap: "3px", flex: 1, overflowY: "auto", scrollbarWidth: "none" }}>
+                                      {dayEvents.map((ev, eIdx) => {
+                                          let bgColor = theme.primary;
+                                          if (ev.isCancelled) bgColor = isDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)";
+                                          else if (ev.type === 'exam') bgColor = theme.danger;
+                                          else if (ev.title && COLORS[ev.title.split(' ')[0]]) bgColor = COLORS[ev.title.split(' ')[0]];
+
+                                          return (
+                                              <div key={eIdx} style={{ fontSize: "10px", padding: "3px 5px", borderRadius: "4px", background: bgColor, color: ev.isCancelled ? theme.textMuted : "#ffffff", textDecoration: ev.isCancelled ? "line-through" : "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginBottom: "2px" }}>
+                                                  {ev.isCancelled ? `❌ ${ev.title}` : `${ev.time ? '[' + ev.time + '] ' : ''}${ev.title}`}
+                                              </div>
+                                          );
+                                      })}
+                                  </div>
+                              </div>
+                          );
+                      })}
+                  </div>
+              </div>
           </div>
         )}
 
+        {/* 上課紀錄與以下均不變 */}
         {activeView === "class" && (
           <div style={{ animation: "fadeIn 0.4s ease" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
@@ -280,96 +343,60 @@ export default function StudentPortal() {
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-                  {getFilteredLogs().map((log: any) => {
+                  {studentData.classLogs.filter((l:any) => logFilter === "全部" || l.subject === logFilter).map((log: any) => {
                       const isExpanded = expandedLogId === log.id;
                       const subColor = COLORS[log.subject] || theme.primary;
-                      
                       return (
                       <div key={log.id} style={{ ...cardStyle, padding: "0", overflow: "hidden", borderLeftWidth: "6px", borderLeftColor: subColor }}>
-                          <div 
-                              onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
-                              style={{ padding: "20px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", background: isExpanded ? theme.inputBg : theme.card, transition: "0.2s" }}
-                          >
-                              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                                  <span style={{ fontSize: "13px", background: `${subColor}20`, color: subColor, padding: "6px 12px", borderRadius: "10px", fontWeight: "bold" }}>{log.subject}</span>
-                                  <span style={{ fontWeight: "bold", color: theme.textMain, fontSize: "15px" }}>{log.class_date}</span>
-                              </div>
+                          <div onClick={() => setExpandedLogId(isExpanded ? null : log.id)} style={{ padding: "20px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", background: isExpanded ? theme.inputBg : theme.card }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}><span style={{ fontSize: "13px", background: `${subColor}20`, color: subColor, padding: "6px 12px", borderRadius: "10px", fontWeight: "bold" }}>{log.subject}</span><span style={{ fontWeight: "bold", color: theme.textMain, fontSize: "15px" }}>{log.class_date}</span></div>
                               {isExpanded ? <ChevronUp size={20} color={theme.textMuted}/> : <ChevronDown size={20} color={theme.textMuted}/>}
                           </div>
-
-                          {isExpanded && (
-                              <div style={{ padding: "0 20px 20px 20px", background: theme.inputBg, animation: "fadeIn 0.3s ease" }}>
-                                  <div style={{ borderTop: `1px solid ${theme.border}`, paddingTop: "20px" }}>
-                                      {log.expense > 0 && <div style={{fontSize: "13px", color: theme.danger, fontWeight: "bold", marginBottom: "12px", display: "flex", alignItems: "center", gap: "5px"}}><DollarSign size={14}/> 雜費: {log.expense}</div>}
-                                      
-                                      <div style={{ fontSize: "15px", color: theme.textMain, marginBottom: "15px", lineHeight: "1.7" }}>{log.progress}</div>
-                                      
-                                      {(log.homework || log.note) && (
-                                      <div style={{ background: theme.card, padding: "18px", borderRadius: "16px", border: `1px solid ${theme.border}`, boxShadow: "0 4px 15px rgba(0,0,0,0.02)" }}>
-                                          {log.homework && (
-                                              <div style={{ display: "flex", gap: "12px", marginBottom: log.note ? "15px" : "0", alignItems: "flex-start" }}>
-                                                  <div style={{ background: theme.pillBg, padding: "10px", borderRadius: "12px" }}><BookOpen size={18} style={{ color: theme.primary }} /></div>
-                                                  <div>
-                                                      <div style={{ fontSize: "12px", color: theme.textMuted, fontWeight: "bold", marginBottom: "4px" }}>回家作業</div>
-                                                      <div style={{ color: theme.textMain, fontSize: "14px", lineHeight: "1.5" }}>{log.homework}</div>
+                          <div style={{ display: "grid", gridTemplateRows: isExpanded ? "1fr" : "0fr", transition: "grid-template-rows 0.3s ease-out", background: theme.inputBg }}>
+                              <div style={{ overflow: "hidden" }}>
+                                  <div style={{ padding: "0 20px 20px 20px" }}>
+                                      <div style={{ borderTop: `1px solid ${theme.border}`, paddingTop: "20px" }}>
+                                          {log.expense > 0 && <div style={{fontSize: "13px", color: theme.danger, fontWeight: "bold", marginBottom: "12px", display: "flex", alignItems: "center", gap: "5px"}}><DollarSign size={14}/> 雜費: {log.expense}</div>}
+                                          <div style={{ fontSize: "15px", color: theme.textMain, marginBottom: "15px", lineHeight: "1.7" }}>{log.progress}</div>
+                                          {(log.homework || log.note) && (
+                                          <div style={{ background: theme.card, padding: "18px", borderRadius: "16px", border: `1px solid ${theme.border}`, boxShadow: "0 4px 15px rgba(0,0,0,0.02)" }}>
+                                              {log.homework && (
+                                                  <div style={{ display: "flex", gap: "12px", marginBottom: log.note ? "15px" : "0", alignItems: "flex-start" }}>
+                                                      <div style={{ background: theme.pillBg, padding: "10px", borderRadius: "12px" }}><BookOpen size={18} style={{ color: theme.primary }} /></div>
+                                                      <div><div style={{ fontSize: "12px", color: theme.textMuted, fontWeight: "bold", marginBottom: "4px" }}>回家作業</div><div style={{ color: theme.textMain, fontSize: "14px", lineHeight: "1.5" }}>{log.homework}</div></div>
                                                   </div>
-                                              </div>
-                                          )}
-                                          {log.note && (
-                                              <div style={{ display: "flex", gap: "12px", alignItems: "flex-start", marginTop: log.homework ? "15px" : "0", paddingTop: log.homework ? "15px" : "0", borderTop: log.homework ? `1px dashed ${theme.border}` : "none" }}>
-                                                  <div style={{ background: theme.pillBg, padding: "10px", borderRadius: "12px" }}><MessageSquare size={18} style={{ color: theme.success }} /></div>
-                                                  <div>
-                                                      <div style={{ fontSize: "12px", color: theme.textMuted, fontWeight: "bold", marginBottom: "4px" }}>老師叮嚀</div>
-                                                      <div style={{ color: theme.textMain, fontSize: "14px", lineHeight: "1.5" }}>{log.note}</div>
+                                              )}
+                                              {log.note && (
+                                                  <div style={{ display: "flex", gap: "12px", alignItems: "flex-start", marginTop: log.homework ? "15px" : "0", paddingTop: log.homework ? "15px" : "0", borderTop: log.homework ? `1px dashed ${theme.border}` : "none" }}>
+                                                      <div style={{ background: theme.pillBg, padding: "10px", borderRadius: "12px" }}><MessageSquare size={18} style={{ color: theme.success }} /></div>
+                                                      <div><div style={{ fontSize: "12px", color: theme.textMuted, fontWeight: "bold", marginBottom: "4px" }}>老師叮嚀</div><div style={{ color: theme.textMain, fontSize: "14px", lineHeight: "1.5" }}>{log.note}</div></div>
                                                   </div>
-                                              </div>
+                                              )}
+                                          </div>
                                           )}
                                       </div>
-                                      )}
                                   </div>
                               </div>
-                          )}
+                          </div>
                       </div>
                   )})}
-                  {getFilteredLogs().length === 0 && <div style={{textAlign: "center", padding: "40px", color: theme.textMuted}}>尚無紀錄</div>}
+                  {studentData.classLogs.filter((l:any) => logFilter === "全部" || l.subject === logFilter).length === 0 && <div style={{textAlign: "center", padding: "40px", color: theme.textMuted}}>尚無紀錄</div>}
               </div>
           </div>
         )}
 
         {activeView === "grade" && (
           <div style={{ animation: "fadeIn 0.4s ease" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
-                  <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "bold", color: theme.textMain }}>📝 成績分析</h3>
-                  {gradeFilter && <div style={{ fontSize: "14px", fontWeight: "bold", color: theme.textMain, background: theme.card, border: `1px solid ${theme.border}`, padding: "6px 14px", borderRadius: "20px", boxShadow: theme.shadow }}>總平均：<span style={{ color: COLORS[gradeFilter] || theme.primary, fontSize: "16px" }}>{currentAvg}</span> 分</div>}
-              </div>
-              <div style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "10px", marginBottom: "15px" }}>
-                  {studentData.availableSubjects.map((sub: any) => (
-                      <button key={sub} onClick={() => setGradeFilter(sub)} style={filterBtnStyle(gradeFilter === sub, COLORS[sub])}>{sub}</button>
-                  ))}
-              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}><h3 style={{ margin: 0, fontSize: "18px", fontWeight: "bold", color: theme.textMain }}>📝 成績分析</h3>{gradeFilter && <div style={{ fontSize: "14px", fontWeight: "bold", background: theme.card, border: `1px solid ${theme.border}`, padding: "6px 14px", borderRadius: "20px", boxShadow: theme.shadow }}>總平均：<span style={{ color: COLORS[gradeFilter] || theme.primary, fontSize: "16px" }}>{currentAvg}</span> 分</div>}</div>
+              <div style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "10px", marginBottom: "15px" }}>{studentData.availableSubjects.map((sub: any) => (<button key={sub} onClick={() => setGradeFilter(sub)} style={filterBtnStyle(gradeFilter === sub, COLORS[sub])}>{sub}</button>))}</div>
               {currentChartData.length > 0 ? (
+                <>
                   <div style={{ ...cardStyle, height: "260px", padding: "20px 10px 0 0", marginBottom: "20px" }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                          <LineChart data={currentChartData}>
-                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.border} />
-                              <XAxis dataKey="date" tick={{fontSize: 10, fill: theme.textMuted}} stroke={theme.border} />
-                              <YAxis domain={[0, 100]} tick={{fontSize: 10, fill: theme.textMuted}} stroke={theme.border} />
-                              <Tooltip contentStyle={{backgroundColor: theme.card, borderColor: theme.border, color: theme.textMain, borderRadius: "12px", boxShadow: theme.shadow}} itemStyle={{color: theme.textMain}} />
-                              <Line type="monotone" dataKey="score" stroke={COLORS[gradeFilter] || theme.primary} strokeWidth={4} dot={{r:5, fill: theme.card, strokeWidth: 2}} />
-                          </LineChart>
-                      </ResponsiveContainer>
+                      <ResponsiveContainer width="100%" height="100%"><LineChart data={currentChartData}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.border} /><XAxis dataKey="date" tick={{fontSize: 10, fill: theme.textMuted}} stroke={theme.border} /><YAxis domain={[0, 100]} tick={{fontSize: 10, fill: theme.textMuted}} stroke={theme.border} /><Tooltip contentStyle={{backgroundColor: theme.card, borderColor: theme.border, color: theme.textMain, borderRadius: "12px", boxShadow: theme.shadow}} itemStyle={{color: theme.textMain}} /><Line type="monotone" dataKey="score" stroke={COLORS[gradeFilter]} strokeWidth={4} dot={{r:6, fill: theme.card, strokeWidth: 2}} /></LineChart></ResponsiveContainer>
                   </div>
-              ) : <div style={{ textAlign: "center", color: theme.textMuted, padding: "40px", background: theme.card, borderRadius: "20px", border: `1px solid ${theme.border}` }}>尚無成績資料</div>}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
-                  {getFilteredGrades().map((g: any) => (
-                      <div key={g.id} style={{ ...cardStyle, textAlign: "center", padding: "20px", borderTopWidth: "4px", borderTopColor: COLORS[g.subject] || theme.primary }}>
-                          <div style={{ fontSize: "12px", color: theme.textMuted, marginBottom: "8px" }}>{g.exam_date}</div>
-                          <div style={{ fontSize: "15px", fontWeight: "bold", color: theme.textMain }}>{g.subject}</div>
-                          <div style={{ fontSize: "32px", fontWeight: "900", color: g.score >= 60 ? (COLORS[g.subject] || theme.primary) : theme.danger, margin: "10px 0" }}>{g.score}</div>
-                          <div style={{ fontSize: "12px", color: theme.textMuted }}>{g.unit}</div>
-                      </div>
-                  ))}
-              </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>{getFilteredGrades().map((g: any) => (<div key={g.id} style={{ ...cardStyle, textAlign: "center", borderTopWidth: "4px", borderTopColor: COLORS[g.subject] || theme.primary }}><div style={{ fontSize: "12px", color: theme.textMuted, marginBottom: "8px" }}>{g.exam_date}</div><div style={{ fontSize: "15px", fontWeight: "bold", color: theme.textMain }}>{g.subject}</div><div style={{ fontSize: "32px", fontWeight: "900", margin: "10px 0", color: g.score >= 60 ? (COLORS[g.subject] || theme.primary) : theme.danger }}>{g.score}</div><div style={{ fontSize: "12px", color: theme.textMuted }}>{g.unit}</div></div>))}</div>
+                </>
+              ) : <div style={{...cardStyle, textAlign: "center", padding: "40px", color: theme.textMuted}}>尚無資料紀錄</div>}
           </div>
         )}
 
@@ -424,16 +451,13 @@ export default function StudentPortal() {
       
       <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: theme.navBg, backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderTop: `1px solid ${theme.border}`, display: "flex", justifyContent: "space-around", padding: "15px 0 25px 0", zIndex: 100, boxShadow: theme.shadow }}>
          <button onClick={() => setActiveView("home")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "home" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "home" ? "bold" : "normal", transition: "0.2s", transform: activeView === "home" ? "scale(1.1)" : "scale(1)" }}><Home size={22} /><span style={{fontSize: "11px", marginTop: "6px"}}>首頁</span></button>
-         <button onClick={() => setActiveView("class")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "class" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "class" ? "bold" : "normal", transition: "0.2s", transform: activeView === "class" ? "scale(1.1)" : "scale(1)" }}><BookOpen size={22} /><span style={{fontSize: "11px", marginTop: "6px", whiteSpace: "nowrap"}}>上課紀錄</span></button>
+         <button onClick={() => setActiveView("class")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "class" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "class" ? "bold" : "normal", transition: "0.2s", transform: activeView === "class" ? "scale(1.1)" : "scale(1)" }}><BookOpen size={22} /><span style={{fontSize: "11px", marginTop: "6px", whiteSpace: "nowrap"}}>紀錄</span></button>
          <button onClick={() => setActiveView("grade")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "grade" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "grade" ? "bold" : "normal", transition: "0.2s", transform: activeView === "grade" ? "scale(1.1)" : "scale(1)" }}><TrendingUp size={22} /><span style={{fontSize: "11px", marginTop: "6px"}}>成績</span></button>
          <button onClick={() => setActiveView("tuition")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "tuition" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "tuition" ? "bold" : "normal", transition: "0.2s", transform: activeView === "tuition" ? "scale(1.1)" : "scale(1)" }}><DollarSign size={22} /><span style={{fontSize: "11px", marginTop: "6px"}}>帳單</span></button>
          <button onClick={() => setActiveView("points")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "points" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "points" ? "bold" : "normal", transition: "0.2s", transform: activeView === "points" ? "scale(1.1)" : "scale(1)" }}><Coins size={22} /><span style={{fontSize: "11px", marginTop: "6px"}}>點數</span></button>
       </div>
 
-      <style jsx>{`
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        ::-webkit-scrollbar { width: 0px; background: transparent; }
-      `}</style>
+      <style jsx>{` @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } ::-webkit-scrollbar { width: 0px; background: transparent; } `}</style>
     </div>
   );
 }
