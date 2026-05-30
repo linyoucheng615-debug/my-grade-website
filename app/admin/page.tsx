@@ -33,10 +33,9 @@ export default function AdminPage() {
   const [loginName, setLoginName] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   
-  // ★ 核心重構：底部大分頁與第二層功能分頁
-  const [mainTab, setMainTab] = useState("features"); // "features" | "settings"
-  const [selectedFeature, setSelectedFeature] = useState<string | null>(null); // "class", "grade", "point", "tuition", "calendar", "report"
-  const [selectedName, setSelectedName] = useState(""); // 指定的學生
+  const [mainTab, setMainTab] = useState("features"); 
+  const [selectedFeature, setSelectedFeature] = useState<string | null>(null); 
+  const [selectedName, setSelectedName] = useState(""); 
   
   const [loading, setLoading] = useState(false);
   const [studentList, setStudentList] = useState<any[]>([]);
@@ -66,7 +65,11 @@ export default function AdminPage() {
 
   const [tuitionMonth, setTuitionMonth] = useState(new Date().toISOString().slice(0, 7));
   const [tuitionDetails, setTuitionDetails] = useState<any[]>([]);
+  
+  // ★ 時薪專用的狀態管理 (改為表單控制與批次儲存)
   const [subjectRates, setSubjectRates] = useState<any[]>([]);
+  const [localRates, setLocalRates] = useState<Record<string, number>>({});
+
   const [chartData, setChartData] = useState<any[]>([]); 
   const [gradeFilter, setGradeFilter] = useState("數學"); 
   const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
@@ -104,11 +107,13 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
+    if (currentTeacher && selectedName) {
+      fetchRates();
+    }
     if (currentTeacher && selectedName && selectedFeature) {
       resetForm();
       setHistoryFilter("全部");
       fetchHistoryData();
-      fetchRates();
       if (selectedFeature === "report") fetchStudentDetails();
     }
   }, [selectedName, selectedFeature, currentTeacher]);
@@ -236,9 +241,35 @@ export default function AdminPage() {
     fetchCalendar();
   };
 
+  // ★ 修正：將時薪載入到獨立的 localRates 以供表單操作
   const fetchRates = async () => {
+    setLocalRates({});
     const { data } = await supabase.from("subject_rates").select("*").eq("student_name", selectedName);
     setSubjectRates(data || []);
+    const ratesMap: Record<string, number> = {};
+    data?.forEach((r: any) => ratesMap[r.subject] = r.rate);
+    setLocalRates(ratesMap);
+  };
+
+  // ★ 新增：明確且直觀的時薪儲存按鈕機制 (一次性發送至資料庫)
+  const handleSaveAllRates = async () => {
+    if (!selectedName) return alert("請先選擇學生！");
+    setLoading(true);
+    const payload = SUBJECTS.map(sub => ({
+      student_name: selectedName,
+      subject: sub,
+      rate: localRates[sub] || 0
+    }));
+    
+    // Supabase upsert 支援陣列批次寫入，效能更好
+    const { error } = await supabase.from("subject_rates").upsert(payload, { onConflict: 'student_name,subject' });
+    setLoading(false);
+    if (error) {
+      alert("時薪儲存失敗: " + error.message);
+    } else {
+      alert("✅ 各學科時薪已經成功儲存！");
+      fetchRates(); // 重新整理確認資料無誤
+    }
   };
 
   const fetchHistoryData = async () => {
@@ -332,11 +363,6 @@ export default function AdminPage() {
         return { ...c, rate, total, extra };
     });
     setTuitionDetails(details);
-  };
-
-  const updateSubjectRate = async (sub: string, newRate: number) => {
-    await supabase.from("subject_rates").upsert({ student_name: selectedName, subject: sub, rate: newRate }, { onConflict: 'student_name,subject' });
-    fetchRates();
   };
 
   const generateBillingText = () => {
@@ -469,7 +495,7 @@ export default function AdminPage() {
                     <ArrowLeft size={16} /> 返回功能選單
                 </button>
 
-                {/* 學生指定下拉選單 (行事曆因為是全域或單獨指定，可不強制顯示此欄) */}
+                {/* 學生指定下拉選單 */}
                 {selectedFeature !== 'calendar' && (
                     <div style={{ ...solidCardStyle, padding: "20px" }}>
                         <label style={{ fontWeight: "900", display: "block", marginBottom: "12px", color: theme.primary, fontSize: "14px", letterSpacing: "1px" }}>👤 指定要操作的學生：</label>
@@ -525,28 +551,46 @@ export default function AdminPage() {
                 )}
 
                 {selectedFeature === 'tuition' && (
-                  <div style={solidCardStyle}>
-                    <h3 style={{color: theme.textMain, marginBottom: "20px"}}>💰 月底學費結算與明細生成</h3>
-                    <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}><input type="month" value={tuitionMonth} onChange={e => setTuitionMonth(e.target.value)} style={{...inputStyle, width: "auto", flex: 1, minWidth: "140px"}} /><button onClick={handleTuitionCheck} style={{...btnStyle(theme.danger), width: "auto", marginTop: 0, padding: "12px 24px", whiteSpace: "nowrap"}}>核算學費</button><button onClick={generateBillingText} style={{...btnStyle("#6366f1"), width: "auto", marginTop: 0, padding: "12px 24px", display: "flex", alignItems: "center", gap: "8px", whiteSpace: "nowrap"}}><FileText size={18} /> 生成複製明細</button></div>
-                    {billingText && (
-                      <div style={{ marginTop: "25px", position: "relative", animation: "fadeIn 0.3s ease" }}>
-                        <label style={{fontWeight: "bold", color: "#6366f1", marginBottom: "8px", display: "block"}}>👇 點擊右側按鈕一鍵複製文字傳給家長：</label>
-                        <textarea value={billingText} onChange={(e) => setBillingText(e.target.value)} style={{ width: "100%", height: "220px", padding: "18px", borderRadius: "16px", border: `2px solid ${isDarkMode ? "#4338ca" : "#6366f1"}`, fontSize: "14px", fontFamily: "monospace", resize: "none", background: isDarkMode ? "#1e1b4b" : "#f5f3ff", color: theme.textMain, lineHeight: "1.6" }} />
-                        <button onClick={copyToClipboard} style={{ position: "absolute", top: "40px", right: "12px", background: isCopied ? theme.success : theme.card, color: isCopied ? "white" : theme.textMain, border: `1px solid ${theme.border}`, padding: "8px 16px", borderRadius: "8px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", transition: "0.2s", boxShadow: theme.shadow }}>{isCopied ? <Check size={14}/> : <Copy size={14}/>} {isCopied ? "已複製" : "複製文字"}</button>
+                  <>
+                    <div style={solidCardStyle}>
+                      <h3 style={{color: theme.textMain, marginBottom: "20px"}}>💰 月底學費結算與明細生成</h3>
+                      <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}><input type="month" value={tuitionMonth} onChange={e => setTuitionMonth(e.target.value)} style={{...inputStyle, width: "auto", flex: 1, minWidth: "140px"}} /><button onClick={handleTuitionCheck} style={{...btnStyle(theme.danger), width: "auto", marginTop: 0, padding: "12px 24px", whiteSpace: "nowrap"}}>核算學費</button><button onClick={generateBillingText} style={{...btnStyle("#6366f1"), width: "auto", marginTop: 0, padding: "12px 24px", display: "flex", alignItems: "center", gap: "8px", whiteSpace: "nowrap"}}><FileText size={18} /> 生成複製明細</button></div>
+                      {billingText && (
+                        <div style={{ marginTop: "25px", position: "relative", animation: "fadeIn 0.3s ease" }}>
+                          <label style={{fontWeight: "bold", color: "#6366f1", marginBottom: "8px", display: "block"}}>👇 點擊右側按鈕一鍵複製文字傳給家長：</label>
+                          <textarea value={billingText} onChange={(e) => setBillingText(e.target.value)} style={{ width: "100%", height: "220px", padding: "18px", borderRadius: "16px", border: `2px solid ${isDarkMode ? "#4338ca" : "#6366f1"}`, fontSize: "14px", fontFamily: "monospace", resize: "none", background: isDarkMode ? "#1e1b4b" : "#f5f3ff", color: theme.textMain, lineHeight: "1.6" }} />
+                          <button onClick={copyToClipboard} style={{ position: "absolute", top: "40px", right: "12px", background: isCopied ? theme.success : theme.card, color: isCopied ? "white" : theme.textMain, border: `1px solid ${theme.border}`, padding: "8px 16px", borderRadius: "8px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", transition: "0.2s", boxShadow: theme.shadow }}>{isCopied ? <Check size={14}/> : <Copy size={14}/>} {isCopied ? "已複製" : "複製文字"}</button>
+                        </div>
+                      )}
+                      {tuitionDetails.length > 0 && (
+                        <div style={{ marginTop: "25px", borderTop: `2px dashed ${theme.border}`, paddingTop: "20px" }}>
+                          {tuitionDetails.map(t => (
+                            <div key={t.id} style={{ display: "flex", justifyContent: "space-between", padding: "15px", background: theme.inputBg, borderRadius: "14px", marginBottom: "10px", border: `1px solid ${theme.border}` }}>
+                              <div><div style={{fontWeight: "900", fontSize: "15px", color: theme.textMain}}>{t.class_date} <span style={{fontSize: "12px", color: theme.textMuted, fontWeight: "normal"}}>({t.subject})</span></div><div style={{fontSize: "13px", color: theme.textMuted, marginTop: "4px"}}>{t.duration} hr × ${t.rate}/hr {t.extra > 0 && <span style={{color: theme.danger, fontWeight: "bold"}}> + 雜費 {t.extra}</span>}</div></div>
+                              <span style={{ fontWeight: "900", color: theme.danger, display: "flex", alignItems: "center", fontSize: "18px" }}>${t.total}</span>
+                            </div>
+                          ))}
+                          <div style={{ textAlign: "right", fontSize: "28px", fontWeight: "900", marginTop: "20px", color: theme.danger, borderTop: `2px solid ${theme.border}`, paddingTop: "15px" }}>本月總學費總計：${tuitionDetails.reduce((a,b)=>a+b.total,0).toLocaleString()} 元</div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ★ 更新：帳單頁面同樣保有時薪設定區塊與儲存按鈕 */}
+                    <div style={{ ...solidCardStyle, marginTop: "25px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+                        <h3 style={{color: theme.textMain, margin: 0}}>⚙️ 客製化各學科時薪設定</h3>
+                        <button onClick={handleSaveAllRates} disabled={loading} style={{ background: theme.primary, color: "#fff", border: "none", padding: "8px 16px", borderRadius: "10px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}>💾 儲存時薪設定</button>
                       </div>
-                    )}
-                    {tuitionDetails.length > 0 && (
-                      <div style={{ marginTop: "25px", borderTop: `2px dashed ${theme.border}`, paddingTop: "20px" }}>
-                        {tuitionDetails.map(t => (
-                          <div key={t.id} style={{ display: "flex", justifyContent: "space-between", padding: "15px", background: theme.inputBg, borderRadius: "14px", marginBottom: "10px", border: `1px solid ${theme.border}` }}>
-                            <div><div style={{fontWeight: "900", fontSize: "15px", color: theme.textMain}}>{t.class_date} <span style={{fontSize: "12px", color: theme.textMuted, fontWeight: "normal"}}>({t.subject})</span></div><div style={{fontSize: "13px", color: theme.textMuted, marginTop: "4px"}}>{t.duration} hr × ${t.rate}/hr {t.extra > 0 && <span style={{color: theme.danger, fontWeight: "bold"}}> + 雜費 {t.extra}</span>}</div></div>
-                            <span style={{ fontWeight: "900", color: theme.danger, display: "flex", alignItems: "center", fontSize: "18px" }}>${t.total}</span>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "12px" }}>
+                        {SUBJECTS.map(sub => (
+                          <div key={`${selectedName}-${sub}`} style={{ display: "flex", alignItems: "center", gap: "10px", background: theme.inputBg, padding: "12px", borderRadius: "12px", border: `1px solid ${theme.border}` }}>
+                              <span style={{ fontSize: "14px", fontWeight: "bold", color: theme.textMain, minWidth: "40px" }}>{sub}</span>
+                              <input type="number" value={localRates[sub] !== undefined ? localRates[sub] : ''} onChange={e => setLocalRates({...localRates, [sub]: Number(e.target.value)})} placeholder="0" style={{ width: "100%", padding: "8px", borderRadius: "8px", border: `1px solid ${theme.border}`, background: theme.activeControl, color: theme.textMain, textAlign: "center" }} />
                           </div>
                         ))}
-                        <div style={{ textAlign: "right", fontSize: "28px", fontWeight: "900", marginTop: "20px", color: theme.danger, borderTop: `2px solid ${theme.border}`, paddingTop: "15px" }}>本月學費總計：${tuitionDetails.reduce((a,b)=>a+b.total,0).toLocaleString()} 元</div>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  </>
                 )}
 
                 {selectedFeature === 'report' && (
@@ -559,7 +603,6 @@ export default function AdminPage() {
                   </div>
                 )}
 
-                {/* 行事曆有自己專屬的渲染畫面 (這部分保持原本結構) */}
                 {selectedFeature === 'calendar' && (
                   <div>
                     <form onSubmit={handleAddEvent} style={solidCardStyle}>
@@ -746,18 +789,23 @@ export default function AdminPage() {
               ))}
             </div>
 
-            {/* 3. 各學科時薪設定 (移至系統設定中) */}
+            {/* ★ 更新：明確的儲存按鈕機制 */}
             <div style={{ ...solidCardStyle, marginTop: "30px" }}>
-              <h3 style={{color: theme.textMain, marginBottom: "20px"}}>💰 客製化各學科時薪設定</h3>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+                 <h3 style={{color: theme.textMain, margin: 0}}>💰 客製化各學科時薪設定</h3>
+                 <button onClick={handleSaveAllRates} disabled={!selectedName || loading} style={{ background: theme.primary, color: "#fff", border: "none", padding: "8px 16px", borderRadius: "10px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}>💾 儲存時薪設定</button>
+              </div>
               <label style={{ fontWeight: "900", display: "block", marginBottom: "12px", color: theme.primary, fontSize: "13px" }}>選擇要設定時薪的學生：</label>
               <select value={selectedName} onChange={e => setSelectedName(e.target.value)} style={{ ...selectStyle, marginBottom: "20px", fontWeight: "bold" }}>
                   {studentList.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
               </select>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "12px" }}>
-                {SUBJECTS.map(sub => {
-                  const currentRate = subjectRates.find(r => r.subject === sub)?.rate || 0;
-                  return (<div key={sub} style={{ display: "flex", alignItems: "center", gap: "10px", background: theme.inputBg, padding: "12px", borderRadius: "12px", border: `1px solid ${theme.border}` }}><span style={{ fontSize: "14px", fontWeight: "bold", color: theme.textMain }}>{sub}</span><input type="number" defaultValue={currentRate} onBlur={e => updateSubjectRate(sub, Number(e.target.value))} style={{ width: "100%", padding: "8px", borderRadius: "8px", border: `1px solid ${theme.border}`, background: theme.activeControl, color: theme.textMain, textAlign: "center" }} /></div>)
-                })}
+                {SUBJECTS.map(sub => (
+                  <div key={`${selectedName}-${sub}`} style={{ display: "flex", alignItems: "center", gap: "10px", background: theme.inputBg, padding: "12px", borderRadius: "12px", border: `1px solid ${theme.border}` }}>
+                      <span style={{ fontSize: "14px", fontWeight: "bold", color: theme.textMain, minWidth: "40px" }}>{sub}</span>
+                      <input type="number" value={localRates[sub] !== undefined ? localRates[sub] : ''} onChange={e => setLocalRates({...localRates, [sub]: Number(e.target.value)})} placeholder="0" style={{ width: "100%", padding: "8px", borderRadius: "8px", border: `1px solid ${theme.border}`, background: theme.activeControl, color: theme.textMain, textAlign: "center" }} />
+                  </div>
+                ))}
               </div>
             </div>
 
