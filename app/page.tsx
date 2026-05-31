@@ -151,7 +151,6 @@ export default function StudentPortal() {
     setActiveView("home");
   };
 
-  // ★ 核心升級：精準讀取每週重複的單日排除清單 (Exception)
   const getEventsForDate = (dateStr: string) => {
     const currentCellDate = new Date(dateStr);
     const dayOfWeek = currentCellDate.getDay(); 
@@ -269,7 +268,6 @@ export default function StudentPortal() {
                   </div>
               </div>
 
-              {/* 互動式 Google 行事曆 */}
               <div style={{ ...cardStyle, padding: "20px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
                       <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "900", display: "flex", alignItems: "center", gap: "8px", color: theme.textMain }}>
@@ -285,50 +283,55 @@ export default function StudentPortal() {
                       </div>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", textAlign: "center", marginBottom: "10px", fontWeight: "bold", fontSize: "12px", color: theme.textMuted }}>
-                      {WEEK_DAYS.map(d => <div key={d} style={{ padding: "5px 0" }}>{d}</div>)}
-                  </div>
+                  {/* ★ 手機版防跑版：加入可水平滑動的容器限制最小寬度 */}
+                  <div style={{ overflowX: "auto", paddingBottom: "10px", WebkitOverflowScrolling: "touch" }}>
+                    <div style={{ minWidth: "600px" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", textAlign: "center", marginBottom: "10px", fontWeight: "bold", fontSize: "12px", color: theme.textMuted }}>
+                          {WEEK_DAYS.map(d => <div key={d} style={{ padding: "5px 0" }}>{d}</div>)}
+                      </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "6px" }}>
-                      {calendarCells.map((day, idx) => {
-                          if (day === null) return <div key={`blank-${idx}`} style={{ minHeight: "75px", background: "transparent" }} />;
-                          
-                          const monthStr = String(calMonth + 1).padStart(2, '0');
-                          const dayStr = String(day).padStart(2, '0');
-                          const dateKey = `${calYear}-${monthStr}-${dayStr}`;
-                          const dayEvents = getEventsForDate(dateKey);
-                          const isToday = new Date().toISOString().slice(0, 10) === dateKey;
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "6px" }}>
+                          {calendarCells.map((day, idx) => {
+                              if (day === null) return <div key={`blank-${idx}`} style={{ minHeight: "75px", background: "transparent" }} />;
+                              
+                              const monthStr = String(calMonth + 1).padStart(2, '0');
+                              const dayStr = String(day).padStart(2, '0');
+                              const dateKey = `${calYear}-${monthStr}-${dayStr}`;
+                              const dayEvents = getEventsForDate(dateKey);
+                              const isToday = new Date().toISOString().slice(0, 10) === dateKey;
 
-                          return (
-                              <div key={dateKey} style={{ minHeight: "75px", background: theme.inputBg, borderRadius: "12px", padding: "6px", display: "flex", flexDirection: "column", gap: "4px", border: isToday ? `2px solid ${theme.primary}` : `1px solid ${theme.border}` }}>
-                                  <div style={{ display: "flex", justifyContent: "center" }}>
-                                      <span style={{ fontSize: "12px", fontWeight: "bold", width: "20px", height: "20px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%", background: isToday ? theme.primary : "transparent", color: isToday ? "#ffffff" : theme.textMain }}>
-                                          {day}
-                                      </span>
+                              return (
+                                  <div key={dateKey} style={{ minHeight: "75px", background: theme.inputBg, borderRadius: "12px", padding: "6px", display: "flex", flexDirection: "column", gap: "4px", border: isToday ? `2px solid ${theme.primary}` : `1px solid ${theme.border}` }}>
+                                      <div style={{ display: "flex", justifyContent: "center" }}>
+                                          <span style={{ fontSize: "12px", fontWeight: "bold", width: "20px", height: "20px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%", background: isToday ? theme.primary : "transparent", color: isToday ? "#ffffff" : theme.textMain }}>
+                                              {day}
+                                          </span>
+                                      </div>
+                                      <div style={{ display: "flex", flexDirection: "column", gap: "3px", flex: 1, overflowY: "auto", scrollbarWidth: "none" }}>
+                                          {dayEvents.map((ev, eIdx) => {
+                                              let bgColor = theme.primary;
+                                              if (ev.isCancelled) bgColor = isDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)";
+                                              else if (ev.type === 'exam') bgColor = theme.danger;
+                                              else if (ev.title && COLORS[ev.title.split(' ')[0]]) bgColor = COLORS[ev.title.split(' ')[0]];
+
+                                              return (
+                                                  <div key={eIdx} style={{ fontSize: "10px", padding: "3px 5px", borderRadius: "4px", background: bgColor, color: ev.isCancelled ? theme.textMuted : "#ffffff", textDecoration: ev.isCancelled ? "line-through" : "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginBottom: "2px" }}>
+                                                      {ev.isCancelled ? `❌ ${ev.title}` : `${ev.time ? '[' + ev.time + '] ' : ''}${ev.title}`}
+                                                  </div>
+                                              );
+                                          })}
+                                      </div>
                                   </div>
-                                  <div style={{ display: "flex", flexDirection: "column", gap: "3px", flex: 1, overflowY: "auto", scrollbarWidth: "none" }}>
-                                      {dayEvents.map((ev, eIdx) => {
-                                          let bgColor = theme.primary;
-                                          if (ev.isCancelled) bgColor = isDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)";
-                                          else if (ev.type === 'exam') bgColor = theme.danger;
-                                          else if (ev.title && COLORS[ev.title.split(' ')[0]]) bgColor = COLORS[ev.title.split(' ')[0]];
-
-                                          return (
-                                              <div key={eIdx} style={{ fontSize: "10px", padding: "3px 5px", borderRadius: "4px", background: bgColor, color: ev.isCancelled ? theme.textMuted : "#ffffff", textDecoration: ev.isCancelled ? "line-through" : "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginBottom: "2px" }}>
-                                                  {ev.isCancelled ? `❌ ${ev.title}` : `${ev.time ? '[' + ev.time + '] ' : ''}${ev.title}`}
-                                              </div>
-                                          );
-                                      })}
-                                  </div>
-                              </div>
-                          );
-                      })}
+                              );
+                          })}
+                      </div>
+                    </div>
                   </div>
               </div>
           </div>
         )}
 
-        {/* 上課紀錄與以下均不變 */}
+        {/* 上課紀錄 */}
         {activeView === "class" && (
           <div style={{ animation: "fadeIn 0.4s ease" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
@@ -385,6 +388,7 @@ export default function StudentPortal() {
           </div>
         )}
 
+        {/* 成績分析 */}
         {activeView === "grade" && (
           <div style={{ animation: "fadeIn 0.4s ease" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}><h3 style={{ margin: 0, fontSize: "18px", fontWeight: "bold", color: theme.textMain }}>📝 成績分析</h3>{gradeFilter && <div style={{ fontSize: "14px", fontWeight: "bold", background: theme.card, border: `1px solid ${theme.border}`, padding: "6px 14px", borderRadius: "20px", boxShadow: theme.shadow }}>總平均：<span style={{ color: COLORS[gradeFilter] || theme.primary, fontSize: "16px" }}>{currentAvg}</span> 分</div>}</div>
@@ -400,6 +404,7 @@ export default function StudentPortal() {
           </div>
         )}
 
+        {/* 學費明細 */}
         {activeView === "tuition" && (
           <div style={{ animation: "fadeIn 0.4s ease" }}>
                <h3 style={{ margin: "0 0 15px 0", fontSize: "18px", fontWeight: "bold", color: theme.textMain }}>💰 本月學費明細</h3>
@@ -425,6 +430,7 @@ export default function StudentPortal() {
           </div>
         )}
 
+        {/* 點數紀錄 */}
         {activeView === "points" && (
           <div style={{ animation: "fadeIn 0.4s ease" }}>
               <h3 style={{ margin: "0 0 15px 0", fontSize: "18px", fontWeight: "bold", color: theme.textMain }}>💎 點數紀錄</h3>
@@ -449,6 +455,7 @@ export default function StudentPortal() {
 
       </div>
       
+      {/* 底部導覽列 */}
       <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: theme.navBg, backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderTop: `1px solid ${theme.border}`, display: "flex", justifyContent: "space-around", padding: "15px 0 25px 0", zIndex: 100, boxShadow: theme.shadow }}>
          <button onClick={() => setActiveView("home")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "home" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "home" ? "bold" : "normal", transition: "0.2s", transform: activeView === "home" ? "scale(1.1)" : "scale(1)" }}><Home size={22} /><span style={{fontSize: "11px", marginTop: "6px"}}>首頁</span></button>
          <button onClick={() => setActiveView("class")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "class" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "class" ? "bold" : "normal", transition: "0.2s", transform: activeView === "class" ? "scale(1.1)" : "scale(1)" }}><BookOpen size={22} /><span style={{fontSize: "11px", marginTop: "6px", whiteSpace: "nowrap"}}>紀錄</span></button>
