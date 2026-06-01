@@ -145,11 +145,11 @@ export default function AdminPage() {
     navBg: isDarkMode ? "rgba(30, 41, 59, 0.85)" : "rgba(255, 255, 255, 0.85)",
   };
 
-  // ★ 智慧色彩辨識系統
+  // ★ 修正：學校段考改為酒紅色、活動改為湖水藍，避免撞色
   const getEventColor = (ev: any) => {
     if (ev.isCancelled || ev.type === 'cancellation') return isDarkMode ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.15)";
-    if (ev.type === 'exam') return theme.danger;
-    if (ev.type === 'activity') return "#f59e0b"; // 橘色代表活動
+    if (ev.type === 'exam') return "#be123c"; // 深玫瑰紅
+    if (ev.type === 'activity') return "#0891b2"; // 湖水藍
     
     if (ev.title) {
         for (const sub of SUBJECTS) {
@@ -454,44 +454,36 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* ======================= 【核心功能 (Features)】 ======================= */}
         {mainTab === "features" && (
           <div>
             {!selectedFeature && (
               <div style={{ animation: "fadeIn 0.3s ease" }}>
                 <h2 style={{ fontSize: "18px", fontWeight: "900", color: theme.textMain, marginBottom: "20px" }}>🚀 請選擇要執行的功能</h2>
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "15px" }}>
-                    
                     <div onClick={() => setSelectedFeature('class')} style={{ ...solidCardStyle, cursor: "pointer", borderLeft: `6px solid #10b981`, display: "flex", alignItems: "center", gap: "15px", marginBottom: 0 }}>
                         <div style={{ background: "#10b98120", padding: "12px", borderRadius: "12px" }}><BookOpen size={24} color="#10b981" /></div>
                         <div><div style={{ fontWeight: "900", fontSize: "16px", color: theme.textMain }}>📚 登記上課進度</div><div style={{ fontSize: "12px", color: theme.textMuted, marginTop: "4px" }}>進度、作業與雜費紀錄</div></div>
                     </div>
-                    
                     <div onClick={() => setSelectedFeature('grade')} style={{ ...solidCardStyle, cursor: "pointer", borderLeft: `6px solid #3b82f6`, display: "flex", alignItems: "center", gap: "15px", marginBottom: 0 }}>
                         <div style={{ background: "#3b82f620", padding: "12px", borderRadius: "12px" }}><TrendingUp size={24} color="#3b82f6" /></div>
                         <div><div style={{ fontWeight: "900", fontSize: "16px", color: theme.textMain }}>📝 輸入考試成績</div><div style={{ fontSize: "12px", color: theme.textMuted, marginTop: "4px" }}>各校段考與測驗分數</div></div>
                     </div>
-
                     <div onClick={() => setSelectedFeature('point')} style={{ ...solidCardStyle, cursor: "pointer", borderLeft: `6px solid #f59e0b`, display: "flex", alignItems: "center", gap: "15px", marginBottom: 0 }}>
                         <div style={{ background: "#f59e0b20", padding: "12px", borderRadius: "12px" }}><Coins size={24} color="#f59e0b" /></div>
                         <div><div style={{ fontWeight: "900", fontSize: "16px", color: theme.textMain }}>💎 獎勵點數發放</div><div style={{ fontSize: "12px", color: theme.textMuted, marginTop: "4px" }}>加扣點數與原因註記</div></div>
                     </div>
-
                     <div onClick={() => setSelectedFeature('calendar')} style={{ ...solidCardStyle, cursor: "pointer", borderLeft: `6px solid #8b5cf6`, display: "flex", alignItems: "center", gap: "15px", marginBottom: 0 }}>
                         <div style={{ background: "#8b5cf620", padding: "12px", borderRadius: "12px" }}><CalendarIcon size={24} color="#8b5cf6" /></div>
                         <div><div style={{ fontWeight: "900", fontSize: "16px", color: theme.textMain }}>🗓️ 日程與行事曆</div><div style={{ fontSize: "12px", color: theme.textMuted, marginTop: "4px" }}>排定日程與單日停課</div></div>
                     </div>
-
                     <div onClick={() => setSelectedFeature('tuition')} style={{ ...solidCardStyle, cursor: "pointer", borderLeft: `6px solid #ec4899`, display: "flex", alignItems: "center", gap: "15px", marginBottom: 0 }}>
                         <div style={{ background: "#ec489920", padding: "12px", borderRadius: "12px" }}><DollarSign size={24} color="#ec4899" /></div>
                         <div><div style={{ fontWeight: "900", fontSize: "16px", color: theme.textMain }}>💰 結算月底學費</div><div style={{ fontSize: "12px", color: theme.textMuted, marginTop: "4px" }}>費用計算與家長請款</div></div>
                     </div>
-
                     <div onClick={() => setSelectedFeature('report')} style={{ ...solidCardStyle, cursor: "pointer", borderLeft: `6px solid #6366f1`, display: "flex", alignItems: "center", gap: "15px", marginBottom: 0 }}>
                         <div style={{ background: "#6366f120", padding: "12px", borderRadius: "12px" }}><FileText size={24} color="#6366f1" /></div>
                         <div><div style={{ fontWeight: "900", fontSize: "16px", color: theme.textMain }}>📊 檢視學習報表</div><div style={{ fontSize: "12px", color: theme.textMuted, marginTop: "4px" }}>歷次成績走勢與平均</div></div>
                     </div>
-
                 </div>
               </div>
             )}
@@ -575,7 +567,7 @@ export default function AdminPage() {
                               <span style={{ fontWeight: "900", color: theme.danger, display: "flex", alignItems: "center", fontSize: "18px" }}>${t.total}</span>
                             </div>
                           ))}
-                          <div style={{ textAlign: "right", fontSize: "28px", fontWeight: "900", marginTop: "20px", color: theme.danger, borderTop: `2px solid ${theme.border}`, paddingTop: "15px" }}>本月學費總計：${tuitionDetails.reduce((a,b)=>a+b.total,0).toLocaleString()} 元</div>
+                          <div style={{ textAlign: "right", fontSize: "28px", fontWeight: "900", marginTop: "20px", color: theme.danger, borderTop: `2px solid ${theme.border}`, paddingTop: "15px" }}>本月總學費總計：${tuitionDetails.reduce((a,b)=>a+b.total,0).toLocaleString()} 元</div>
                         </div>
                       )}
                     </div>
@@ -675,11 +667,12 @@ export default function AdminPage() {
 
                       <div style={isMobile ? { overflowX: "auto", paddingBottom: "10px", WebkitOverflowScrolling: "touch" } : {}}>
                         <div style={isMobile ? { minWidth: "650px" } : {}}>
-                          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", textAlign: "center", marginBottom: "10px", fontWeight: "bold", fontSize: "12px", color: theme.textMuted }}>
+                          {/* ★ 修正：加入 minmax(0, 1fr) 防止文字撐破版面 */}
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", textAlign: "center", marginBottom: "10px", fontWeight: "bold", fontSize: "12px", color: theme.textMuted }}>
                               {WEEK_DAYS.map(d => <div key={d}>{d}</div>)}
                           </div>
 
-                          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "6px" }}>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: "6px" }}>
                               {calendarCells.map((day: any, idx: number) => {
                                   if (day === null) return <div key={`b-${idx}`} style={{ minHeight: "85px" }} />;
                                   const mStr = String(calMonth + 1).padStart(2, '0');

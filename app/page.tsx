@@ -36,11 +36,10 @@ export default function StudentPortal() {
   const [expandedLogId, setExpandedLogId] = useState<number | null>(null);
 
   const [calendarEvents, setCalendarEvents] = useState<any[]>([]);
-  const [calYear, setCalYear] = useState(new Date().getFullYear());
-  const [calMonth, setCalMonth] = useState(new Date().getMonth());
-
-  // ★ 新增：控制行事曆點擊後的「當日詳細紀錄小視窗」
   const [selectedDayDetail, setSelectedDayDetail] = useState<{date: string, logs: any[], events: any[]} | null>(null);
+
+  const [viewDate, setViewDate] = useState(new Date());
+  const [calendarView, setCalendarView] = useState<"month" | "week">("month");
 
   useEffect(() => {
     const savedLogin = localStorage.getItem("studentLogin");
@@ -90,10 +89,11 @@ export default function StudentPortal() {
     shadow: isDarkMode ? "0 10px 40px rgba(0,0,0,0.5)" : "0 10px 40px rgba(14, 165, 233, 0.05)",
   };
 
+  // ★ 修正：學校段考改為酒紅色、活動改為湖水藍，避免撞色
   const getEventColor = (ev: any) => {
     if (ev.isCancelled || ev.type === 'cancellation') return isDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)";
-    if (ev.type === 'exam') return theme.danger;
-    if (ev.type === 'activity') return "#f59e0b"; 
+    if (ev.type === 'exam') return "#be123c"; 
+    if (ev.type === 'activity') return "#0891b2"; 
     
     if (ev.title) {
         for (const sub of SUBJECTS) {
@@ -121,7 +121,7 @@ export default function StudentPortal() {
     const { data: points } = await supabase.from("point_logs").select("*").eq("student_name", student.name).order("created_at", { ascending: false });
     const { data: rates } = await supabase.from("subject_rates").select("*").eq("student_name", student.name);
 
-    const { data: manualEvents } = await supabase.from("calendar_events").select("*").or(`student_name.eq.${student.name},student_name.eq.全體`);
+    const { data: manualEvents } = await supabase.from("calendar_events").select("*").in('student_name', [student.name, '全體']);
     setCalendarEvents(manualEvents || []);
 
     let totalFee = 0;
@@ -242,11 +242,48 @@ export default function StudentPortal() {
     </div>
   );
 
-  const firstDayIndex = new Date(calYear, calMonth, 1).getDay();
-  const totalDays = new Date(calYear, calMonth + 1, 0).getDate();
-  const blanks = Array(firstDayIndex).fill(null);
-  const daysInMonth = Array.from({ length: totalDays }, (_, i) => i + 1);
-  const calendarCells = [...blanks, ...daysInMonth];
+  const calYear = viewDate.getFullYear();
+  const calMonth = viewDate.getMonth();
+
+  const handlePrev = () => {
+      if (calendarView === "month") {
+          setViewDate(new Date(calYear, calMonth - 1, 1));
+      } else {
+          setViewDate(new Date(calYear, calMonth, viewDate.getDate() - 7));
+      }
+  };
+
+  const handleNext = () => {
+      if (calendarView === "month") {
+          setViewDate(new Date(calYear, calMonth + 1, 1));
+      } else {
+          setViewDate(new Date(calYear, calMonth, viewDate.getDate() + 7));
+      }
+  };
+
+  let displayCells: any[] = [];
+  if (calendarView === "month") {
+      const firstDayIndex = new Date(calYear, calMonth, 1).getDay();
+      const totalDays = new Date(calYear, calMonth + 1, 0).getDate();
+      for (let i = 0; i < firstDayIndex; i++) displayCells.push(null);
+      for (let i = 1; i <= totalDays; i++) {
+          const mStr = String(calMonth + 1).padStart(2, '0');
+          const dStr = String(i).padStart(2, '0');
+          displayCells.push({ day: i, dateKey: `${calYear}-${mStr}-${dStr}` });
+      }
+  } else {
+      const currentDayOfWeek = viewDate.getDay();
+      const sunday = new Date(viewDate);
+      sunday.setDate(viewDate.getDate() - currentDayOfWeek);
+      for (let i = 0; i < 7; i++) {
+          const tempDate = new Date(sunday);
+          tempDate.setDate(sunday.getDate() + i);
+          const y = tempDate.getFullYear();
+          const m = String(tempDate.getMonth() + 1).padStart(2, '0');
+          const d = String(tempDate.getDate()).padStart(2, '0');
+          displayCells.push({ day: tempDate.getDate(), dateKey: `${y}-${m}-${d}` });
+      }
+  }
 
   const getFilteredGrades = () => studentData.grades.filter((g: any) => g.subject === gradeFilter);
   const currentChartData = [...getFilteredGrades()].reverse().map((g: any) => ({ date: g.exam_date, score: g.score }));
@@ -292,46 +329,51 @@ export default function StudentPortal() {
               </div>
 
               <div style={{ ...cardStyle, padding: "20px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "10px" }}>
                       <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "900", display: "flex", alignItems: "center", gap: "8px", color: theme.textMain }}>
                           <Calendar size={20} color={theme.primary} /> 🗓️ 專屬行事曆
                       </h3>
                       <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                           <span style={{ fontWeight: "bold", fontSize: "15px", color: theme.textMain }}>{calYear} 年 {calMonth + 1} 月</span>
+                          
+                          <select value={calendarView} onChange={(e) => setCalendarView(e.target.value as "month"|"week")} style={{ background: theme.inputBg, border: `1px solid ${theme.border}`, color: theme.textMain, borderRadius: "8px", padding: "4px 8px", fontSize: "12px", outline: "none", cursor: "pointer", fontWeight: "bold" }}>
+                              <option value="month">月檢視</option>
+                              <option value="week">週檢視</option>
+                          </select>
+
                           <div style={{ display: "flex", gap: "5px" }}>
-                              <button onClick={() => { if (calMonth === 0) { setCalMonth(11); setCalYear(calYear - 1); } else { setCalMonth(calMonth - 1); } }} style={{ background: theme.inputBg, border: "none", padding: "6px 10px", borderRadius: "8px", color: theme.textMain, cursor: "pointer" }}><ChevronLeft size={16} /></button>
-                              <button onClick={() => { setCalYear(new Date().getFullYear()); setCalMonth(new Date().getMonth()); }} style={{ background: theme.inputBg, border: "none", padding: "6px 12px", borderRadius: "8px", fontSize: "12px", color: theme.textMain, fontWeight: "bold", cursor: "pointer" }}>今天</button>
-                              <button onClick={() => { if (calMonth === 11) { setCalMonth(0); setCalYear(calYear + 1); } else { setCalMonth(calMonth + 1); } }} style={{ background: theme.inputBg, border: "none", padding: "6px 10px", borderRadius: "8px", color: theme.textMain, cursor: "pointer" }}><ChevronRight size={16} /></button>
+                              <button onClick={handlePrev} style={{ background: theme.inputBg, border: "none", padding: "6px 10px", borderRadius: "8px", color: theme.textMain, cursor: "pointer" }}><ChevronLeft size={16} /></button>
+                              <button onClick={() => setViewDate(new Date())} style={{ background: theme.inputBg, border: "none", padding: "6px 12px", borderRadius: "8px", fontSize: "12px", color: theme.textMain, fontWeight: "bold", cursor: "pointer" }}>今天</button>
+                              <button onClick={handleNext} style={{ background: theme.inputBg, border: "none", padding: "6px 10px", borderRadius: "8px", color: theme.textMain, cursor: "pointer" }}><ChevronRight size={16} /></button>
                           </div>
                       </div>
                   </div>
 
-                  <div style={{ overflowX: "auto", paddingBottom: "10px", WebkitOverflowScrolling: "touch" }}>
-                    <div style={{ minWidth: "600px" }}>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", textAlign: "center", marginBottom: "10px", fontWeight: "bold", fontSize: "12px", color: theme.textMuted }}>
+                  <div style={isMobile ? { overflowX: "auto", paddingBottom: "10px", WebkitOverflowScrolling: "touch" } : {}}>
+                    <div style={isMobile ? { minWidth: "600px" } : {}}>
+                      {/* ★ 修正：加入 minmax(0, 1fr) 防止文字撐破版面 */}
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", textAlign: "center", marginBottom: "10px", fontWeight: "bold", fontSize: "12px", color: theme.textMuted }}>
                           {WEEK_DAYS.map(d => <div key={d} style={{ padding: "5px 0" }}>{d}</div>)}
                       </div>
 
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "6px" }}>
-                          {calendarCells.map((day, idx) => {
-                              if (day === null) return <div key={`blank-${idx}`} style={{ minHeight: "75px", background: "transparent" }} />;
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: "6px" }}>
+                          {displayCells.map((cell, idx) => {
+                              if (cell === null) return <div key={`blank-${idx}`} style={{ minHeight: "75px", background: "transparent" }} />;
                               
-                              const monthStr = String(calMonth + 1).padStart(2, '0');
-                              const dayStr = String(day).padStart(2, '0');
-                              const dateKey = `${calYear}-${monthStr}-${dayStr}`;
+                              const dateKey = cell.dateKey;
                               const dayEvents = getEventsForDate(dateKey);
                               const dayLogs = studentData.classLogs.filter((l: any) => l.class_date === dateKey);
                               const hasLog = dayLogs.length > 0;
                               const isToday = new Date().toISOString().slice(0, 10) === dateKey;
+                              
+                              const cellMinHeight = calendarView === "week" ? "120px" : "75px";
 
                               return (
-                                  // ★ 新增 onClick 觸發詳細視窗
-                                  <div key={dateKey} onClick={() => setSelectedDayDetail({ date: dateKey, logs: dayLogs, events: dayEvents })} style={{ cursor: "pointer", minHeight: "75px", background: theme.inputBg, borderRadius: "12px", padding: "6px", display: "flex", flexDirection: "column", gap: "4px", border: isToday ? `2px solid ${theme.primary}` : `1px solid ${theme.border}`, position: "relative" }}>
+                                  <div key={dateKey} onClick={() => setSelectedDayDetail({ date: dateKey, logs: dayLogs, events: dayEvents })} style={{ cursor: "pointer", minHeight: cellMinHeight, background: theme.inputBg, borderRadius: "12px", padding: "6px", display: "flex", flexDirection: "column", gap: "4px", border: isToday ? `2px solid ${theme.primary}` : `1px solid ${theme.border}`, position: "relative" }}>
                                       <div style={{ display: "flex", justifyContent: "center", position: "relative" }}>
                                           <span style={{ fontSize: "12px", fontWeight: "bold", width: "20px", height: "20px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%", background: isToday ? theme.primary : "transparent", color: isToday ? "#ffffff" : theme.textMain }}>
-                                              {day}
+                                              {cell.day}
                                           </span>
-                                          {/* ★ 有上課紀錄的綠色小圓點提示 */}
                                           {hasLog && <div style={{ position: "absolute", right: "2px", top: "2px", width: "6px", height: "6px", background: theme.success, borderRadius: "50%", boxShadow: `0 0 5px ${theme.success}` }} title="有上課紀錄" />}
                                       </div>
                                       <div style={{ display: "flex", flexDirection: "column", gap: "3px", flex: 1, overflowY: "auto", scrollbarWidth: "none" }}>
@@ -487,20 +529,16 @@ export default function StudentPortal() {
          <button onClick={() => setActiveView("points")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "points" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "points" ? "bold" : "normal", transition: "0.2s", transform: activeView === "points" ? "scale(1.1)" : "scale(1)" }}><Coins size={22} /><span style={{fontSize: "11px", marginTop: "6px"}}>點數</span></button>
       </div>
 
-      {/* ★ 新增：當日排程與上課紀錄的懸浮小視窗 (Modal) */}
       {selectedDayDetail && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", zIndex: 1000, display: "flex", justifyContent: "center", alignItems: "center", padding: "20px", animation: "fadeIn 0.2s" }} onClick={() => setSelectedDayDetail(null)}>
           <div style={{ background: theme.bodyBg, width: "100%", maxWidth: "420px", borderRadius: "24px", padding: "25px", boxShadow: "0 20px 50px rgba(0,0,0,0.3)", position: "relative", maxHeight: "80vh", overflowY: "auto", border: `1px solid ${theme.border}` }} onClick={e => e.stopPropagation()}>
              
-             {/* 關閉按鈕 */}
              <button onClick={() => setSelectedDayDetail(null)} style={{ position: "absolute", top: 15, right: 15, background: theme.card, border: `1px solid ${theme.border}`, color: theme.textMuted, cursor: "pointer", borderRadius: "50%", padding: "6px", display: "flex", alignItems: "center", justifyContent: "center", transition: "0.2s" }}><X size={18}/></button>
              
-             {/* 標題 */}
              <h3 style={{ margin: "0 0 20px 0", color: theme.textMain, display: "flex", alignItems: "center", gap: "10px", fontSize: "18px", fontWeight: "900" }}>
                  <Calendar size={22} color={theme.primary}/> {selectedDayDetail.date}
              </h3>
 
-             {/* 📌 日程事件區塊 */}
              <div style={{ marginBottom: "25px" }}>
                 <div style={{ fontSize: "13px", fontWeight: "bold", color: theme.textMuted, marginBottom: "10px", borderBottom: `2px dashed ${theme.border}`, paddingBottom: "5px" }}>📌 本日排程</div>
                 {selectedDayDetail.events.length > 0 ? (
@@ -518,7 +556,6 @@ export default function StudentPortal() {
                 ) : <div style={{ fontSize: "14px", color: theme.textMuted, background: theme.card, padding: "15px", borderRadius: "12px", textAlign: "center", border: `1px solid ${theme.border}` }}>本日無特殊排程</div>}
              </div>
 
-             {/* 📖 上課紀錄區塊 */}
              <div>
                 <div style={{ fontSize: "13px", fontWeight: "bold", color: theme.textMuted, marginBottom: "10px", borderBottom: `2px dashed ${theme.border}`, paddingBottom: "5px" }}>📖 上課紀錄</div>
                 {selectedDayDetail.logs.length > 0 ? (
