@@ -44,7 +44,6 @@ export default function AdminPage() {
   const [historyFilter, setHistoryFilter] = useState("全部");
   const [isMobile, setIsMobile] = useState(false);
 
-  // ★ 新增：刪除確認狀態管理 (避開 LINE 瀏覽器阻擋 window.confirm)
   const [confirmStudentId, setConfirmStudentId] = useState<number | null>(null);
   const [confirmEvId, setConfirmEvId] = useState<number | null>(null);
 
@@ -146,6 +145,20 @@ export default function AdminPage() {
     navBg: isDarkMode ? "rgba(30, 41, 59, 0.85)" : "rgba(255, 255, 255, 0.85)",
   };
 
+  // ★ 智慧色彩辨識系統
+  const getEventColor = (ev: any) => {
+    if (ev.isCancelled || ev.type === 'cancellation') return isDarkMode ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.15)";
+    if (ev.type === 'exam') return theme.danger;
+    if (ev.type === 'activity') return "#f59e0b"; // 橘色代表活動
+    
+    if (ev.title) {
+        for (const sub of SUBJECTS) {
+            if (ev.title.includes(sub)) return COLORS[sub];
+        }
+    }
+    return theme.primary;
+  };
+
   const fetchStudents = async () => {
     const { data } = await supabase.from("students").select("*").order("name");
     if (data && data.length > 0) {
@@ -174,7 +187,6 @@ export default function AdminPage() {
   const resetStudentForm = () => { setNewStudentName(""); setNewStudentSchool(""); setNewStudentPassword("1234"); setEditingStudentId(null); };
   const handleEditStudentClick = (s: any) => { setEditingStudentId(s.id); setNewStudentName(s.name); setNewStudentPassword(s.password); setNewStudentSchool(s.school || ""); window.scrollTo({ top: 0, behavior: 'smooth' }); };
 
-  // ★ 移除 window.confirm
   const handleDeleteStudent = async (id: number) => {
     setLoading(true);
     await supabase.from("students").delete().eq("id", id);
@@ -434,7 +446,6 @@ export default function AdminPage() {
       <style jsx global>{` body { background-color: ${theme.bodyBg}; margin: 0; transition: background-color 0.5s ease; } `}</style>
       <div style={{ maxWidth: "850px", margin: "auto", padding: "20px" }}>
         
-        {/* 教師標頭資訊 */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "30px" }}>
           <h1 style={{ fontSize: "24px", color: theme.textMain, fontWeight: "900" }}>👩‍🏫 {currentTeacher.name} 的管理後台</h1>
           <div style={{ display: "flex", gap: "10px" }}>
@@ -446,7 +457,6 @@ export default function AdminPage() {
         {/* ======================= 【核心功能 (Features)】 ======================= */}
         {mainTab === "features" && (
           <div>
-            {/* 尚未選擇具體功能時：呈現六大方塊選單 */}
             {!selectedFeature && (
               <div style={{ animation: "fadeIn 0.3s ease" }}>
                 <h2 style={{ fontSize: "18px", fontWeight: "900", color: theme.textMain, marginBottom: "20px" }}>🚀 請選擇要執行的功能</h2>
@@ -486,14 +496,12 @@ export default function AdminPage() {
               </div>
             )}
 
-            {/* 進入特定功能：兩步驟式操作 (先選學生，再進行操作) */}
             {selectedFeature && (
               <div style={{ animation: "fadeIn 0.3s ease" }}>
                 <button onClick={() => setSelectedFeature(null)} style={{ background: theme.inputBg, border: `1px solid ${theme.border}`, padding: "8px 16px", borderRadius: "12px", color: theme.textMain, cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", marginBottom: "20px", fontWeight: "bold", transition: "0.2s" }} onMouseOver={(e)=>e.currentTarget.style.background=theme.activeControl} onMouseOut={(e)=>e.currentTarget.style.background=theme.inputBg}>
                     <ArrowLeft size={16} /> 返回功能選單
                 </button>
 
-                {/* 學生指定下拉選單 */}
                 {selectedFeature !== 'calendar' && (
                     <div style={{ ...solidCardStyle, padding: "20px" }}>
                         <label style={{ fontWeight: "900", display: "block", marginBottom: "12px", color: theme.primary, fontSize: "14px", letterSpacing: "1px" }}>👤 指定要操作的學生：</label>
@@ -503,7 +511,6 @@ export default function AdminPage() {
                     </div>
                 )}
 
-                {/* 根據選擇的功能渲染 */}
                 {selectedFeature === 'class' && (
                   <>
                     <form onSubmit={e => handleSubmit(e, "class")} style={solidCardStyle}>
@@ -519,7 +526,6 @@ export default function AdminPage() {
                       <button type="submit" style={btnStyle("#10b981")}>確認儲存紀錄</button>
                     </form>
                     <div style={{ ...solidCardStyle, padding: "12px 20px", display: "flex", alignItems: "center", gap: "12px", marginTop: "20px" }}><Filter size={16} color={theme.textMuted} /><span style={{ fontSize: "14px", color: theme.textMuted, fontWeight: "bold" }}>科目快速篩選：</span><select value={historyFilter} onChange={e => setHistoryFilter(e.target.value)} style={{ ...selectStyle, width: "auto", padding: "6px 12px", margin: 0, background: theme.inputBg, fontSize: "13px" }}><option value="全部">全部顯示</option>{SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-                    {/* ★ 移除 window.confirm 的 onDelete 傳遞 */}
                     <HistoryList data={historyData} type="class" theme={theme} isDarkMode={isDarkMode} onEdit={(item: any) => { setEditingId(item.id); setProgress(item.progress); setClassDate(item.class_date); setSubject(item.subject); setDuration(item.duration); setHomework(item.homework || ""); setNote(item.note || ""); setExpense(item.expense || ""); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onDelete={async (id: number, info: string) => { await supabase.from("class_logs").delete().eq("id", id); fetchHistoryData(); }} />
                   </>
                 )}
@@ -534,7 +540,6 @@ export default function AdminPage() {
                       <button type="submit" style={btnStyle("#3b82f6")}>儲存成績資料</button>
                     </form>
                     <div style={{ ...solidCardStyle, padding: "12px 20px", display: "flex", alignItems: "center", gap: "12px", marginTop: "20px" }}><Filter size={16} color={theme.textMuted} /><span style={{ fontSize: "14px", color: theme.textMuted, fontWeight: "bold" }}>科目快速篩選：</span><select value={historyFilter} onChange={e => setHistoryFilter(e.target.value)} style={{ ...selectStyle, width: "auto", padding: "6px 12px", margin: 0, background: theme.inputBg, fontSize: "13px" }}><option value="全部">全部顯示</option>{SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-                    {/* ★ 移除 window.confirm 的 onDelete 傳遞 */}
                     <HistoryList data={historyData} type="grade" theme={theme} isDarkMode={isDarkMode} onEdit={(item: any) => { setEditingId(item.id); setScore(item.score); setExamDate(item.exam_date); setSubject(item.subject); setUnit(item.unit || ""); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onDelete={async (id: number, info: string) => { await supabase.from("grades").delete().eq("id", id); fetchHistoryData(); }} />
                   </>
                 )}
@@ -546,7 +551,6 @@ export default function AdminPage() {
                       <input type="number" placeholder="輸入增減點數 (加點輸入正數，扣點輸入負數，如: -5)" value={points} onChange={e => setPoints(e.target.value)} style={inputStyle} /><input type="text" placeholder="增減點數的原因註記" value={reason} onChange={e => setReason(e.target.value)} style={inputStyle} />
                       <button type="submit" style={btnStyle("#f59e0b")}>確認發放點數</button>
                     </form>
-                    {/* ★ 移除 window.confirm 的 onDelete 傳遞 */}
                     <HistoryList data={historyData} type="point" theme={theme} isDarkMode={isDarkMode} onEdit={(item: any) => { setEditingId(item.id); setPoints(item.points); setReason(item.reason); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onDelete={async (id: number, info: string) => { await supabase.from("point_logs").delete().eq("id", id); fetchHistoryData(); }} />
                   </>
                 )}
@@ -603,7 +607,6 @@ export default function AdminPage() {
                   </div>
                 )}
 
-                {/* 行事曆有自己專屬的渲染畫面 */}
                 {selectedFeature === 'calendar' && (
                   <div>
                     <form onSubmit={handleAddEvent} style={solidCardStyle}>
@@ -670,9 +673,8 @@ export default function AdminPage() {
                           </div>
                       </div>
 
-                      {/* ★ 手機版防跑版：加入可水平滑動的容器限制最小寬度 */}
-                      <div style={{ overflowX: "auto", paddingBottom: "10px", WebkitOverflowScrolling: "touch" }}>
-                        <div style={{ minWidth: "650px" }}>
+                      <div style={isMobile ? { overflowX: "auto", paddingBottom: "10px", WebkitOverflowScrolling: "touch" } : {}}>
+                        <div style={isMobile ? { minWidth: "650px" } : {}}>
                           <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", textAlign: "center", marginBottom: "10px", fontWeight: "bold", fontSize: "12px", color: theme.textMuted }}>
                               {WEEK_DAYS.map(d => <div key={d}>{d}</div>)}
                           </div>
@@ -693,10 +695,10 @@ export default function AdminPage() {
                                           </div>
                                           <div style={{ display: "flex", flexDirection: "column", gap: "3px", flex: 1, overflowY: "auto", scrollbarWidth: "none" }}>
                                               {dayEvents.map((ev, eIdx) => {
-                                                  const itemColor = COLORS[ev.title] || theme.primary;
+                                                  const itemColor = getEventColor(ev);
                                                   const timeLabel = ev.start_time ? `${ev.start_time} ` : "";
                                                   return (
-                                                      <div key={eIdx} style={{ fontSize: "9px", padding: "2px 4px", borderRadius: "4px", background: ev.isCancelled ? "rgba(0,0,0,0.15)" : itemColor, color: ev.isCancelled ? theme.textMuted : "#ffffff", textDecoration: ev.isCancelled ? "line-through" : "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                                      <div key={eIdx} style={{ fontSize: "9px", padding: "2px 4px", borderRadius: "4px", background: itemColor, color: (ev.isCancelled || ev.type === 'cancellation') ? theme.textMuted : "#ffffff", textDecoration: (ev.isCancelled || ev.type === 'cancellation') ? "line-through" : "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                                                           {ev.student_name === "全體" ? "" : `[${ev.student_name}]`}{timeLabel}{ev.type === 'cancellation' ? "❌停課" : ev.title}
                                                       </div>
                                                   );
@@ -712,7 +714,7 @@ export default function AdminPage() {
 
                     <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "20px" }}>
                       {calendarEvents.map(ev => (
-                          <div key={ev.id} style={{ ...solidCardStyle, padding: "18px", marginBottom: 0, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <div key={ev.id} style={{ ...solidCardStyle, padding: "18px", marginBottom: 0, display: "flex", justifyContent: "space-between", alignItems: "center", borderLeft: `6px solid ${getEventColor(ev)}` }}>
                               <div style={{ width: "100%" }}>
                                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                                       <div>
@@ -723,7 +725,6 @@ export default function AdminPage() {
                                           <div style={{fontWeight: "900", fontSize: "17px", color: theme.textMain, marginTop: "4px"}}>{ev.type === 'cancellation' ? `❌【停課通知】${ev.title}` : ev.title}</div>
                                       </div>
                                       
-                                      {/* ★ 加入內建刪除確認UI (取代 window.confirm) */}
                                       <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
                                           {confirmEvId === ev.id ? (
                                               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -781,7 +782,6 @@ export default function AdminPage() {
           <div style={{ animation: "fadeIn 0.3s ease" }}>
             <h2 style={{ fontSize: "20px", fontWeight: "900", color: theme.textMain, marginBottom: "20px" }}>⚙️ 系統設定與名單管理</h2>
 
-            {/* 1. 新增/編輯學生帳號表單 */}
             <form onSubmit={handleSaveStudent} style={{...solidCardStyle, position: "relative"}}>
               {editingStudentId && <button onClick={resetStudentForm} style={{position:"absolute", right:15, top:15, background:"none", border:"none", color:theme.textMuted, cursor:"pointer"}}><X size={20}/></button>}
               <h3 style={{color: theme.textMain, marginBottom: "20px", display: "flex", alignItems: "center", gap: "10px"}}>{editingStudentId ? <Pencil size={20} color={theme.primary}/> : <UserPlus size={20}/>} {editingStudentId ? "編輯學生帳號資料" : "註冊全新學生帳號"}</h3>
@@ -793,14 +793,12 @@ export default function AdminPage() {
               <button type="submit" disabled={loading} style={btnStyle(editingStudentId ? theme.success : theme.primary)}>{editingStudentId ? "確認儲存修改" : "完成新增並註冊"}</button>
             </form>
 
-            {/* 2. 學生清單與管理 */}
             <h3 style={{color: theme.textMain, margin: "30px 0 15px 10px", display: "flex", alignItems: "center", gap: "10px"}}><Users size={20}/> 學生名單管理</h3>
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "15px" }}>
               {studentList.map(s => (
                 <div key={s.id} style={{ ...solidCardStyle, padding: "18px", marginBottom: 0, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div><div style={{fontWeight: "900", fontSize: "17px", color: theme.textMain}}>{s.name}</div><div style={{fontSize: "13px", color: theme.textMuted, marginTop: "4px"}}>{s.school || "未設定學校"}</div><div style={{fontSize: "12px", color: theme.primary, marginTop: "2px"}}>登入密碼: <span style={{letterSpacing: "2px", fontWeight: "bold"}}>****</span></div></div>
                   
-                  {/* ★ 加入內建刪除確認UI */}
                   <div style={{display:"flex", gap: "10px", alignItems: "center"}}>
                     {confirmStudentId === s.id ? (
                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -818,7 +816,6 @@ export default function AdminPage() {
               ))}
             </div>
 
-            {/* 3. 各學科時薪設定 */}
             <div style={{ ...solidCardStyle, marginTop: "30px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
                  <h3 style={{color: theme.textMain, margin: 0}}>💰 客製化各學科時薪設定</h3>
@@ -848,19 +845,16 @@ export default function AdminPage() {
              <Home size={26} style={{ marginBottom: "6px", transform: mainTab === "features" ? "scale(1.1)" : "scale(1)" }} />
              <span style={{ fontSize: "12px", fontWeight: mainTab === "features" ? "bold" : "normal" }}>🚀 核心功能</span>
          </button>
-         
          <button onClick={() => setMainTab("settings")} style={{ flex: 1, background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: mainTab === "settings" ? theme.primary : theme.textMuted, cursor: "pointer", transition: "0.2s" }}>
              <Settings size={26} style={{ marginBottom: "6px", transform: mainTab === "settings" ? "scale(1.1)" : "scale(1)" }} />
              <span style={{ fontSize: "12px", fontWeight: mainTab === "settings" ? "bold" : "normal" }}>⚙️ 設定管理</span>
          </button>
-
       </div>
       <style jsx>{` @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } ::-webkit-scrollbar { width: 0px; background: transparent; } `}</style>
     </div>
   );
 }
 
-// 歷史清單渲染子組件 (★ 大幅升級：加入 UI 內建刪除確認，取代 window.confirm)
 function HistoryList({ data, type, onEdit, onDelete, theme, isDarkMode }: HistoryListProps) {
   const [confirmId, setConfirmId] = useState<number | null>(null);
 
@@ -876,8 +870,6 @@ function HistoryList({ data, type, onEdit, onDelete, theme, isDarkMode }: Histor
             : (<div><div style={{fontWeight: "bold"}}>📂 {item.subject}: {item.progress} <span style={{color:theme.textMuted, fontWeight: "normal"}}>({item.class_date} | {item.duration} hr)</span></div>{item.expense > 0 && <div style={{fontSize: "13px", color: theme.danger, fontWeight: "900", marginTop: "6px", display: "flex", alignItems: "center", gap: "4px"}}><DollarSign size={14}/> 雜費: {item.expense}</div>}<div style={{ display: "flex", gap: "10px", marginTop: "10px", fontSize: "13px" }}>{item.homework && <span style={{display:"flex", alignItems:"center", gap: 5, background: isDarkMode ? "rgba(56,189,248,0.15)" : "#e0f2fe", padding: "4px 10px", borderRadius: "8px", color: theme.primary, fontWeight: "bold"}}><BookOpen size={14}/> {item.homework}</span>}{item.note && <span style={{display:"flex", alignItems:"center", gap: 5, background: isDarkMode ? "rgba(52,211,153,0.15)" : "#dcfce7", padding: "4px 10px", borderRadius: "8px", color: theme.success, fontWeight: "bold"}}><MessageSquare size={14}/> {item.note}</span>}</div></div>)}
           </div>
           <div style={{ display: "flex", gap: "15px", marginLeft: "15px" }}>
-            
-            {/* 內建刪除確認UI */}
             {confirmId === item.id ? (
                 <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                     <button onClick={() => { onDelete(item.id, infoStr); setConfirmId(null); }} style={{ background: theme.danger, color: "#fff", border: "none", padding: "8px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" }}>確定</button>
@@ -889,7 +881,6 @@ function HistoryList({ data, type, onEdit, onDelete, theme, isDarkMode }: Histor
                     <button onClick={() => setConfirmId(item.id)} style={{ border: "none", background: "none", cursor: "pointer", color: theme.danger }}><Trash2 size={20} /></button>
                 </>
             )}
-
           </div>
         </div>
       )}) : <p style={{ textAlign: "center", color: theme.textMuted, padding: "30px", border: `1px dashed ${theme.border}`, borderRadius: "20px" }}>目前沒有相關歷史數據紀錄 ✨</p>}

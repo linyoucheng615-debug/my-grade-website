@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { User, Lock, BookOpen, MessageSquare, DollarSign, TrendingUp, Home, Calendar, Award, LogOut, Coins, FileText, ChevronDown, ChevronUp, Sun, Moon, Filter, Bell, Clock, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
+import { User, Lock, BookOpen, MessageSquare, DollarSign, TrendingUp, Home, Calendar, Award, LogOut, Coins, FileText, ChevronDown, ChevronUp, Sun, Moon, Filter, Bell, Clock, AlertTriangle, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { createClient } from '@supabase/supabase-js';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -9,6 +9,7 @@ const supabaseUrl = "https://ynkvxixhiwwnocqybprs.supabase.co";
 const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlua3Z4aXhoaXd3bm9jcXlicHJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY1MDM5MzYsImV4cCI6MjA4MjA3OTkzNn0.9Z_SKdFXQOrZXEHT4J4wkSXBpt097tOuuXI6IFJN_FA";
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+const SUBJECTS = ["國文", "英文", "數學", "理化", "生物", "地科", "歷史", "地理", "公民"];
 const COLORS: Record<string, string> = {
   "國文": "#ef4444", "英文": "#f59e0b", "數學": "#10b981",
   "理化": "#3b82f6", "生物": "#8b5cf6", "地科": "#ec4899",
@@ -22,6 +23,7 @@ export default function StudentPortal() {
   const [loginPassword, setLoginPassword] = useState("");
   const [studentData, setStudentData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   
   const [tuitionTotal, setTuitionTotal] = useState(0);
   const [tuitionDetails, setTuitionDetails] = useState<any[]>([]);
@@ -37,16 +39,24 @@ export default function StudentPortal() {
   const [calYear, setCalYear] = useState(new Date().getFullYear());
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
 
+  // ★ 新增：控制行事曆點擊後的「當日詳細紀錄小視窗」
+  const [selectedDayDetail, setSelectedDayDetail] = useState<{date: string, logs: any[], events: any[]} | null>(null);
+
   useEffect(() => {
     const savedLogin = localStorage.getItem("studentLogin");
     const savedTheme = localStorage.getItem("studentTheme");
     if (savedTheme === "dark") setIsDarkMode(true);
     
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    handleResize(); 
+    window.addEventListener('resize', handleResize);
+
     if (savedLogin) {
       const { name, password } = JSON.parse(savedLogin);
       setLoginName(name);
       fetchStudentData(name, password);
     }
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   useEffect(() => {
@@ -78,6 +88,19 @@ export default function StudentPortal() {
     pillBg: isDarkMode ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.03)",
     navBg: isDarkMode ? "rgba(30, 41, 59, 0.85)" : "rgba(255, 255, 255, 0.85)",
     shadow: isDarkMode ? "0 10px 40px rgba(0,0,0,0.5)" : "0 10px 40px rgba(14, 165, 233, 0.05)",
+  };
+
+  const getEventColor = (ev: any) => {
+    if (ev.isCancelled || ev.type === 'cancellation') return isDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)";
+    if (ev.type === 'exam') return theme.danger;
+    if (ev.type === 'activity') return "#f59e0b"; 
+    
+    if (ev.title) {
+        for (const sub of SUBJECTS) {
+            if (ev.title.includes(sub)) return COLORS[sub];
+        }
+    }
+    return theme.primary;
   };
 
   const fetchStudentData = async (name: string, password: string) => {
@@ -283,7 +306,6 @@ export default function StudentPortal() {
                       </div>
                   </div>
 
-                  {/* ★ 手機版防跑版：加入可水平滑動的容器限制最小寬度 */}
                   <div style={{ overflowX: "auto", paddingBottom: "10px", WebkitOverflowScrolling: "touch" }}>
                     <div style={{ minWidth: "600px" }}>
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", textAlign: "center", marginBottom: "10px", fontWeight: "bold", fontSize: "12px", color: theme.textMuted }}>
@@ -298,25 +320,26 @@ export default function StudentPortal() {
                               const dayStr = String(day).padStart(2, '0');
                               const dateKey = `${calYear}-${monthStr}-${dayStr}`;
                               const dayEvents = getEventsForDate(dateKey);
+                              const dayLogs = studentData.classLogs.filter((l: any) => l.class_date === dateKey);
+                              const hasLog = dayLogs.length > 0;
                               const isToday = new Date().toISOString().slice(0, 10) === dateKey;
 
                               return (
-                                  <div key={dateKey} style={{ minHeight: "75px", background: theme.inputBg, borderRadius: "12px", padding: "6px", display: "flex", flexDirection: "column", gap: "4px", border: isToday ? `2px solid ${theme.primary}` : `1px solid ${theme.border}` }}>
-                                      <div style={{ display: "flex", justifyContent: "center" }}>
+                                  // ★ 新增 onClick 觸發詳細視窗
+                                  <div key={dateKey} onClick={() => setSelectedDayDetail({ date: dateKey, logs: dayLogs, events: dayEvents })} style={{ cursor: "pointer", minHeight: "75px", background: theme.inputBg, borderRadius: "12px", padding: "6px", display: "flex", flexDirection: "column", gap: "4px", border: isToday ? `2px solid ${theme.primary}` : `1px solid ${theme.border}`, position: "relative" }}>
+                                      <div style={{ display: "flex", justifyContent: "center", position: "relative" }}>
                                           <span style={{ fontSize: "12px", fontWeight: "bold", width: "20px", height: "20px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%", background: isToday ? theme.primary : "transparent", color: isToday ? "#ffffff" : theme.textMain }}>
                                               {day}
                                           </span>
+                                          {/* ★ 有上課紀錄的綠色小圓點提示 */}
+                                          {hasLog && <div style={{ position: "absolute", right: "2px", top: "2px", width: "6px", height: "6px", background: theme.success, borderRadius: "50%", boxShadow: `0 0 5px ${theme.success}` }} title="有上課紀錄" />}
                                       </div>
                                       <div style={{ display: "flex", flexDirection: "column", gap: "3px", flex: 1, overflowY: "auto", scrollbarWidth: "none" }}>
                                           {dayEvents.map((ev, eIdx) => {
-                                              let bgColor = theme.primary;
-                                              if (ev.isCancelled) bgColor = isDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)";
-                                              else if (ev.type === 'exam') bgColor = theme.danger;
-                                              else if (ev.title && COLORS[ev.title.split(' ')[0]]) bgColor = COLORS[ev.title.split(' ')[0]];
-
+                                              const bgColor = getEventColor(ev);
                                               return (
-                                                  <div key={eIdx} style={{ fontSize: "10px", padding: "3px 5px", borderRadius: "4px", background: bgColor, color: ev.isCancelled ? theme.textMuted : "#ffffff", textDecoration: ev.isCancelled ? "line-through" : "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginBottom: "2px" }}>
-                                                      {ev.isCancelled ? `❌ ${ev.title}` : `${ev.time ? '[' + ev.time + '] ' : ''}${ev.title}`}
+                                                  <div key={eIdx} style={{ fontSize: "10px", padding: "3px 5px", borderRadius: "4px", background: bgColor, color: (ev.isCancelled || ev.type === 'cancellation') ? theme.textMuted : "#ffffff", textDecoration: (ev.isCancelled || ev.type === 'cancellation') ? "line-through" : "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginBottom: "2px" }}>
+                                                      {ev.isCancelled || ev.type === 'cancellation' ? `❌ ${ev.title}` : `${ev.time ? '[' + ev.time + '] ' : ''}${ev.title}`}
                                                   </div>
                                               );
                                           })}
@@ -463,6 +486,74 @@ export default function StudentPortal() {
          <button onClick={() => setActiveView("tuition")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "tuition" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "tuition" ? "bold" : "normal", transition: "0.2s", transform: activeView === "tuition" ? "scale(1.1)" : "scale(1)" }}><DollarSign size={22} /><span style={{fontSize: "11px", marginTop: "6px"}}>帳單</span></button>
          <button onClick={() => setActiveView("points")} style={{ background: "transparent", border: "none", display: "flex", flexDirection: "column", alignItems: "center", color: activeView === "points" ? theme.primary : theme.textMuted, cursor: "pointer", flex: 1, fontWeight: activeView === "points" ? "bold" : "normal", transition: "0.2s", transform: activeView === "points" ? "scale(1.1)" : "scale(1)" }}><Coins size={22} /><span style={{fontSize: "11px", marginTop: "6px"}}>點數</span></button>
       </div>
+
+      {/* ★ 新增：當日排程與上課紀錄的懸浮小視窗 (Modal) */}
+      {selectedDayDetail && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", zIndex: 1000, display: "flex", justifyContent: "center", alignItems: "center", padding: "20px", animation: "fadeIn 0.2s" }} onClick={() => setSelectedDayDetail(null)}>
+          <div style={{ background: theme.bodyBg, width: "100%", maxWidth: "420px", borderRadius: "24px", padding: "25px", boxShadow: "0 20px 50px rgba(0,0,0,0.3)", position: "relative", maxHeight: "80vh", overflowY: "auto", border: `1px solid ${theme.border}` }} onClick={e => e.stopPropagation()}>
+             
+             {/* 關閉按鈕 */}
+             <button onClick={() => setSelectedDayDetail(null)} style={{ position: "absolute", top: 15, right: 15, background: theme.card, border: `1px solid ${theme.border}`, color: theme.textMuted, cursor: "pointer", borderRadius: "50%", padding: "6px", display: "flex", alignItems: "center", justifyContent: "center", transition: "0.2s" }}><X size={18}/></button>
+             
+             {/* 標題 */}
+             <h3 style={{ margin: "0 0 20px 0", color: theme.textMain, display: "flex", alignItems: "center", gap: "10px", fontSize: "18px", fontWeight: "900" }}>
+                 <Calendar size={22} color={theme.primary}/> {selectedDayDetail.date}
+             </h3>
+
+             {/* 📌 日程事件區塊 */}
+             <div style={{ marginBottom: "25px" }}>
+                <div style={{ fontSize: "13px", fontWeight: "bold", color: theme.textMuted, marginBottom: "10px", borderBottom: `2px dashed ${theme.border}`, paddingBottom: "5px" }}>📌 本日排程</div>
+                {selectedDayDetail.events.length > 0 ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                        {selectedDayDetail.events.map((ev, idx) => {
+                            const bgColor = getEventColor(ev);
+                            return (
+                                <div key={idx} style={{ padding: "12px 15px", borderRadius: "12px", background: bgColor, color: (ev.isCancelled || ev.type === 'cancellation') ? theme.textMuted : "#ffffff", textDecoration: (ev.isCancelled || ev.type === 'cancellation') ? "line-through" : "none", fontSize: "14px", fontWeight: "bold", display: "flex", alignItems: "center", gap: "10px", boxShadow: "0 4px 10px rgba(0,0,0,0.05)" }}>
+                                    {(ev.isCancelled || ev.type === 'cancellation') ? "❌" : (ev.type === 'exam' ? "🏆" : "📌")} 
+                                    {ev.time ? `[${ev.time}] ` : ''}{ev.title}
+                                </div>
+                            )
+                        })}
+                    </div>
+                ) : <div style={{ fontSize: "14px", color: theme.textMuted, background: theme.card, padding: "15px", borderRadius: "12px", textAlign: "center", border: `1px solid ${theme.border}` }}>本日無特殊排程</div>}
+             </div>
+
+             {/* 📖 上課紀錄區塊 */}
+             <div>
+                <div style={{ fontSize: "13px", fontWeight: "bold", color: theme.textMuted, marginBottom: "10px", borderBottom: `2px dashed ${theme.border}`, paddingBottom: "5px" }}>📖 上課紀錄</div>
+                {selectedDayDetail.logs.length > 0 ? (
+                   <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                     {selectedDayDetail.logs.map(log => (
+                       <div key={log.id} style={{ background: theme.card, padding: "18px", borderRadius: "16px", borderLeft: `6px solid ${COLORS[log.subject] || theme.primary}`, boxShadow: theme.shadow }}>
+                         <div style={{ fontWeight: "900", fontSize: "16px", color: theme.textMain, marginBottom: "12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span>{log.subject}</span>
+                            <span style={{fontSize:"12px", color:theme.textMuted, fontWeight:"normal", background: theme.inputBg, padding: "4px 8px", borderRadius: "8px"}}>{log.duration} hr</span>
+                         </div>
+                         <div style={{ fontSize: "14px", color: theme.textMain, marginBottom: "15px", lineHeight: "1.6" }}>{log.progress}</div>
+                         
+                         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                             {log.homework && (
+                                 <div style={{ fontSize: "13px", color: theme.textMuted, display: "flex", gap: "8px", alignItems: "flex-start", background: theme.inputBg, padding: "10px", borderRadius: "10px" }}>
+                                     <BookOpen size={16} color={theme.primary} style={{flexShrink:0}}/> 
+                                     <span style={{ lineHeight: "1.4" }}>{log.homework}</span>
+                                 </div>
+                             )}
+                             {log.note && (
+                                 <div style={{ fontSize: "13px", color: theme.textMuted, display: "flex", gap: "8px", alignItems: "flex-start", background: theme.inputBg, padding: "10px", borderRadius: "10px" }}>
+                                     <MessageSquare size={16} color={theme.success} style={{flexShrink:0}}/> 
+                                     <span style={{ lineHeight: "1.4" }}>{log.note}</span>
+                                 </div>
+                             )}
+                         </div>
+                       </div>
+                     ))}
+                   </div>
+                ) : <div style={{ fontSize: "14px", color: theme.textMuted, background: theme.card, padding: "15px", borderRadius: "12px", textAlign: "center", border: `1px solid ${theme.border}` }}>此日尚未登記上課紀錄</div>}
+             </div>
+
+          </div>
+        </div>
+      )}
 
       <style jsx>{` @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } ::-webkit-scrollbar { width: 0px; background: transparent; } `}</style>
     </div>
