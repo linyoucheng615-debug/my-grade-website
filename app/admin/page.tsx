@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { LogOut, Pencil, Trash2, User, Lock, BookOpen, MessageSquare, TrendingUp, Filter, Clock, DollarSign, Copy, Check, FileText, Sun, Moon, Home, Coins, UserPlus, GraduationCap, Users, X, AlertTriangle, Calendar as CalendarIcon, Plus, ChevronLeft, ChevronRight, ArrowLeft, Settings } from "lucide-react";
+import { LogOut, Pencil, Trash2, User, Lock, BookOpen, MessageSquare, TrendingUp, Filter, Clock, DollarSign, Copy, Check, FileText, Sun, Moon, Home, Coins, UserPlus, GraduationCap, Users, X, AlertTriangle, Calendar as CalendarIcon, Plus, ChevronLeft, ChevronRight, ArrowLeft, Settings, Search } from "lucide-react";
 import { createClient } from '@supabase/supabase-js';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
@@ -94,6 +94,13 @@ export default function AdminPage() {
   const [calYear, setCalYear] = useState(new Date().getFullYear());
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
 
+  const [searchKeyword, setSearchKeyword] = useState("");
+  const [lastRecord, setLastRecord] = useState<any>(null);
+
+  // ★ 新增：儀表板專用狀態
+  const [dashboardLowGrades, setDashboardLowGrades] = useState<any[]>([]);
+  const [dashboardMissingLogs, setDashboardMissingLogs] = useState<any[]>([]);
+
   useEffect(() => {
     const saved = localStorage.getItem("teacherName");
     const savedTheme = localStorage.getItem("teacherTheme");
@@ -111,17 +118,71 @@ export default function AdminPage() {
     if (currentTeacher && selectedName) {
       fetchRates();
     }
-    if (currentTeacher && selectedName && selectedFeature) {
+    if (currentTeacher && selectedName && selectedFeature && selectedFeature !== 'dashboard') {
       resetForm();
       setHistoryFilter("全部");
+      setSearchKeyword(""); 
       fetchHistoryData();
       if (selectedFeature === "report") fetchStudentDetails();
     }
   }, [selectedName, selectedFeature, currentTeacher]);
 
   useEffect(() => {
-    if (currentTeacher && selectedName && selectedFeature) fetchHistoryData();
+    if (currentTeacher && selectedName && selectedFeature && selectedFeature !== 'dashboard') fetchHistoryData();
   }, [historyFilter]);
+
+  useEffect(() => {
+    if (selectedFeature === 'class' && selectedName && subject) {
+        const fetchLast = async () => {
+            const { data } = await supabase.from("class_logs")
+                .select("*").eq("student_name", selectedName).eq("subject", subject)
+                .order("class_date", { ascending: false }).limit(1);
+            setLastRecord(data && data.length > 0 ? data[0] : null);
+        };
+        fetchLast();
+    }
+  }, [selectedFeature, selectedName, subject]);
+
+  // ★ 新增：當選擇儀表板時，自動抓取全域資料
+  useEffect(() => {
+    if (selectedFeature === 'dashboard' && currentTeacher) {
+        fetchDashboardData();
+    }
+  }, [selectedFeature, calendarEvents]);
+
+  const fetchDashboardData = async () => {
+      setLoading(true);
+      // 1. 低分預警 (考不到 60 分的紀錄，抓近期 10 筆)
+      const { data: grades } = await supabase.from("grades")
+          .select("*").lt("score", 60).order("exam_date", { ascending: false }).limit(10);
+      setDashboardLowGrades(grades || []);
+
+      // 2. 待補進度提醒 (比對過去 7 天的行事曆與上課紀錄)
+      const today = new Date();
+      const missing: any[] = [];
+      const past7Days = Array.from({length: 7}, (_, i) => {
+          const d = new Date(today);
+          d.setDate(today.getDate() - i - 1); // 過去 7 天 (不含今天)
+          return d.toISOString().slice(0, 10);
+      });
+
+      const { data: recentLogs } = await supabase.from("class_logs").select("*").in("class_date", past7Days);
+      const logsMap = new Set((recentLogs || []).map(l => `${l.student_name}_${l.class_date}`));
+
+      past7Days.forEach(dateStr => {
+          const dayEvents = getEventsForDate(dateStr);
+          dayEvents.forEach(ev => {
+              // 找出有排課、沒取消、且有指定學生的事件
+              if (ev.type === 'class' && !ev.isCancelled && ev.student_name !== '全體') {
+                  if (!logsMap.has(`${ev.student_name}_${dateStr}`)) {
+                      missing.push({ student_name: ev.student_name, date: dateStr, title: ev.title });
+                  }
+              }
+          });
+      });
+      setDashboardMissingLogs(missing);
+      setLoading(false);
+  };
 
   const toggleTheme = () => {
     const newTheme = !isDarkMode;
@@ -287,7 +348,7 @@ export default function AdminPage() {
     if (!tableName) return;
     let query = supabase.from(tableName).select("*").eq("student_name", selectedName);
     if (historyFilter !== "全部" && (selectedFeature === "class" || selectedFeature === "grade")) { query = query.eq("subject", historyFilter); }
-    const { data } = await query.order("created_at", { ascending: false }).limit(20);
+    const { data } = await query.order("created_at", { ascending: false }).limit(50);
     setHistoryData(data || []);
   };
 
@@ -352,7 +413,16 @@ export default function AdminPage() {
     const { error } = editingId ? await supabase.from(tableName).update(payload).eq("id", editingId) : await supabase.from(tableName).insert([payload]);
     setLoading(false);
     if (error) alert(error.message);
-    else { alert("🎉 儲存成功！"); resetForm(); fetchHistoryData(); fetchStudentDetails(); }
+    else { 
+      alert("🎉 儲存成功！"); 
+      resetForm(); 
+      fetchHistoryData(); 
+      fetchStudentDetails();
+      if (selectedFeature === 'class') {
+         const { data } = await supabase.from("class_logs").select("*").eq("student_name", selectedName).eq("subject", subject).order("class_date", { ascending: false }).limit(1);
+         setLastRecord(data && data.length > 0 ? data[0] : null);
+      }
+    }
   };
 
   const handleTuitionCheck = async () => {
@@ -402,6 +472,13 @@ export default function AdminPage() {
   };
 
   const copyToClipboard = () => { navigator.clipboard.writeText(billingText); setIsCopied(true); setTimeout(() => setIsCopied(false), 2000); };
+
+  const filteredHistory = historyData.filter(item => {
+    if (!searchKeyword) return true;
+    const kw = searchKeyword.toLowerCase();
+    const str = `${item.subject || ''} ${item.progress || ''} ${item.homework || ''} ${item.note || ''} ${item.unit || ''} ${item.reason || ''}`.toLowerCase();
+    return str.includes(kw);
+  });
 
   const globalContainerStyle: React.CSSProperties = { minHeight: "100vh", background: theme.bg, transition: "background 0.5s ease", color: theme.textMain, fontFamily: "sans-serif" };
   const cardStyle: React.CSSProperties = { background: theme.card, padding: "20px", borderRadius: "20px", borderTop: `1px solid ${theme.border}`, borderRight: `1px solid ${theme.border}`, borderBottom: `1px solid ${theme.border}`, borderLeft: `1px solid ${theme.border}`, boxShadow: theme.shadow, marginBottom: "25px", transition: "0.3s ease" };
@@ -459,6 +536,13 @@ export default function AdminPage() {
               <div style={{ animation: "fadeIn 0.3s ease" }}>
                 <h2 style={{ fontSize: "18px", fontWeight: "900", color: theme.textMain, marginBottom: "20px" }}>🚀 請選擇要執行的功能</h2>
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "15px" }}>
+                    
+                    {/* ★ 新增：今日看板總覽 */}
+                    <div onClick={() => setSelectedFeature('dashboard')} style={{ ...solidCardStyle, cursor: "pointer", borderLeft: `6px solid ${theme.primary}`, display: "flex", alignItems: "center", gap: "15px", marginBottom: 0, gridColumn: isMobile ? "auto" : "span 2" }}>
+                        <div style={{ background: `${theme.primary}20`, padding: "12px", borderRadius: "12px" }}><Home size={24} color={theme.primary} /></div>
+                        <div><div style={{ fontWeight: "900", fontSize: "16px", color: theme.textMain }}>🏠 老師今日看板</div><div style={{ fontSize: "12px", color: theme.textMuted, marginTop: "4px" }}>今日課表、未填紀錄與低分預警</div></div>
+                    </div>
+
                     <div onClick={() => setSelectedFeature('class')} style={{ ...solidCardStyle, cursor: "pointer", borderLeft: `6px solid #10b981`, display: "flex", alignItems: "center", gap: "15px", marginBottom: 0 }}>
                         <div style={{ background: "#10b98120", padding: "12px", borderRadius: "12px" }}><BookOpen size={24} color="#10b981" /></div>
                         <div><div style={{ fontWeight: "900", fontSize: "16px", color: theme.textMain }}>📚 登記上課進度</div><div style={{ fontSize: "12px", color: theme.textMuted, marginTop: "4px" }}>進度、作業與雜費紀錄</div></div>
@@ -493,7 +577,8 @@ export default function AdminPage() {
                     <ArrowLeft size={16} /> 返回功能選單
                 </button>
 
-                {selectedFeature !== 'calendar' && (
+                {/* ★ 當選擇儀表板時，不顯示指定學生的下拉選單 */}
+                {selectedFeature !== 'calendar' && selectedFeature !== 'dashboard' && (
                     <div style={{ ...solidCardStyle, padding: "20px" }}>
                         <label style={{ fontWeight: "900", display: "block", marginBottom: "12px", color: theme.primary, fontSize: "14px", letterSpacing: "1px" }}>👤 指定要操作的學生：</label>
                         <select value={selectedName} onChange={e => setSelectedName(e.target.value)} style={{ ...selectStyle, background: theme.inputBg, fontSize: "18px", fontWeight: "bold", color: theme.textMain, border: `1px solid ${theme.border}`, padding: "12px 15px", margin: 0 }}>
@@ -502,22 +587,122 @@ export default function AdminPage() {
                     </div>
                 )}
 
+                {/* ======================= 【儀表板 Dashboard UI】 ======================= */}
+                {selectedFeature === 'dashboard' && (
+                  <div style={{ animation: "fadeIn 0.4s ease" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "20px" }}>
+                          
+                          {/* 📌 今日課表 */}
+                          <div style={solidCardStyle}>
+                             <h3 style={{ margin: "0 0 15px 0", color: theme.primary, display: "flex", alignItems: "center", gap: "8px" }}><CalendarIcon size={20}/> 📌 今日排程</h3>
+                             {getEventsForDate(new Date().toISOString().slice(0, 10)).filter(e => !e.isCancelled).length > 0 ? (
+                                 <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                                     {getEventsForDate(new Date().toISOString().slice(0, 10)).filter(e => !e.isCancelled).map((ev, idx) => (
+                                         <div key={idx} style={{ padding: "12px", background: theme.inputBg, borderRadius: "12px", borderLeft: `4px solid ${getEventColor(ev)}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                             <div>
+                                                 <div style={{ fontSize: "14px", fontWeight: "bold", color: theme.textMain }}>{ev.title}</div>
+                                                 <div style={{ fontSize: "12px", color: theme.textMuted, marginTop: "4px" }}>對象: {ev.student_name}</div>
+                                             </div>
+                                             {ev.start_time && <div style={{ fontSize: "13px", fontWeight: "bold", color: theme.textMain }}>{ev.start_time}</div>}
+                                         </div>
+                                     ))}
+                                 </div>
+                             ) : <div style={{ color: theme.textMuted, fontSize: "14px", textAlign: "center", padding: "20px", background: theme.inputBg, borderRadius: "12px", border: `1px dashed ${theme.border}` }}>今日無排定行程 🎉</div>}
+                          </div>
+
+                          {/* 📝 待補紀錄 */}
+                          <div style={solidCardStyle}>
+                             <h3 style={{ margin: "0 0 15px 0", color: "#f59e0b", display: "flex", alignItems: "center", gap: "8px" }}><AlertTriangle size={20}/> 📝 待補進度提醒 (近7日)</h3>
+                             {dashboardMissingLogs.length > 0 ? (
+                                 <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                                     {dashboardMissingLogs.map((log, idx) => (
+                                         <div key={idx} style={{ padding: "12px", background: theme.inputBg, borderRadius: "12px", borderLeft: `4px solid #f59e0b`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                             <div>
+                                                 <div style={{ fontSize: "14px", fontWeight: "bold", color: theme.textMain }}>{log.title}</div>
+                                                 <div style={{ fontSize: "12px", color: theme.textMuted, marginTop: "4px" }}>對象: {log.student_name}</div>
+                                             </div>
+                                             <div style={{ fontSize: "12px", color: theme.danger, fontWeight: "bold" }}>{log.date}</div>
+                                         </div>
+                                     ))}
+                                 </div>
+                             ) : <div style={{ color: theme.textMuted, fontSize: "14px", textAlign: "center", padding: "20px", background: theme.inputBg, borderRadius: "12px", border: `1px dashed ${theme.border}` }}>所有紀錄皆已填寫完畢 ✅</div>}
+                          </div>
+
+                          {/* ⚠️ 低分預警 */}
+                          <div style={{...solidCardStyle, gridColumn: isMobile ? "auto" : "span 2"}}>
+                             <h3 style={{ margin: "0 0 15px 0", color: theme.danger, display: "flex", alignItems: "center", gap: "8px" }}><TrendingUp size={20} style={{transform: "scaleY(-1)"}}/> ⚠️ 近期低分預警 (&lt;60分)</h3>
+                             {dashboardLowGrades.length > 0 ? (
+                                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: "10px" }}>
+                                     {dashboardLowGrades.map((g, idx) => (
+                                         <div key={idx} style={{ padding: "15px", background: theme.inputBg, borderRadius: "12px", borderTop: `4px solid ${theme.danger}`, border: `1px solid ${theme.border}` }}>
+                                             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                                                 <span style={{ fontSize: "15px", fontWeight: "bold", color: theme.textMain }}>{g.student_name}</span>
+                                                 <span style={{ fontSize: "12px", color: theme.textMuted }}>{g.exam_date}</span>
+                                             </div>
+                                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                                                 <div>
+                                                     <div style={{ fontSize: "13px", fontWeight: "bold", color: theme.textMuted }}>{g.subject}</div>
+                                                     <div style={{ fontSize: "11px", color: theme.textMuted, marginTop: "2px" }}>{g.unit}</div>
+                                                 </div>
+                                                 <div style={{ fontSize: "28px", fontWeight: "900", color: theme.danger }}>{g.score}</div>
+                                             </div>
+                                         </div>
+                                     ))}
+                                 </div>
+                             ) : <div style={{ color: theme.textMuted, fontSize: "14px", textAlign: "center", padding: "20px", background: theme.inputBg, borderRadius: "12px", border: `1px dashed ${theme.border}` }}>近期無低於 60 分之紀錄 🎊</div>}
+                          </div>
+
+                      </div>
+                  </div>
+                )}
+
                 {selectedFeature === 'class' && (
                   <>
                     <form onSubmit={e => handleSubmit(e, "class")} style={solidCardStyle}>
                       <h3 style={{color: theme.textMain, marginBottom: "20px"}}>📚 登記上課進度</h3>
-                      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 2fr 1fr", gap: "15px", marginBottom: "15px" }}>
-                        <select value={subject} onChange={e => setSubject(e.target.value)} style={selectStyle}>{SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}</select>
-                        <input type="date" value={classDate} onChange={e => setClassDate(e.target.value)} style={inputStyle} />
-                        <div style={{position:"relative"}}><input type="number" step="0.5" placeholder="時數" value={duration} onChange={e => setDuration(e.target.value)} style={{...inputStyle, textAlign: "center"}} /><span style={{position:"absolute", right: 10, top: 18, fontSize:12, color: theme.textMuted}}>hr</span></div>
+                      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.5fr 2fr 1fr", gap: "15px", marginBottom: "15px" }}>
+                        <select value={subject} onChange={e => setSubject(e.target.value)} style={{...selectStyle, margin: 0}}>{SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}</select>
+                        
+                        <div style={{ display: "flex", gap: "8px" }}>
+                          <input type="date" value={classDate} onChange={e => setClassDate(e.target.value)} style={{...inputStyle, margin: 0, flex: 1}} />
+                          <button type="button" onClick={() => setClassDate(new Date().toISOString().slice(0, 10))} style={{ background: theme.activeControl, color: theme.textMain, border: `1px solid ${theme.border}`, borderRadius: "10px", cursor: "pointer", fontSize: "13px", fontWeight: "bold", padding: "0 12px", whiteSpace: "nowrap" }}>今天</button>
+                          <button type="button" onClick={() => { const d = new Date(); d.setDate(d.getDate()-1); setClassDate(d.toISOString().slice(0, 10)); }} style={{ background: theme.activeControl, color: theme.textMain, border: `1px solid ${theme.border}`, borderRadius: "10px", cursor: "pointer", fontSize: "13px", fontWeight: "bold", padding: "0 12px", whiteSpace: "nowrap" }}>昨天</button>
+                        </div>
+
+                        <div style={{position:"relative"}}><input type="number" step="0.5" placeholder="時數" value={duration} onChange={e => setDuration(e.target.value)} style={{...inputStyle, margin: 0, textAlign: "center"}} /><span style={{position:"absolute", right: 12, top: 14, fontSize:12, color: theme.textMuted}}>hr</span></div>
                       </div>
                       <div style={{position:"relative", marginBottom: "15px"}}><DollarSign size={16} style={{position:"absolute", left:12, top:16, color:theme.danger}}/><input type="number" placeholder="課堂雜費金額 (選填)" value={expense} onChange={e => setExpense(e.target.value)} style={{...inputStyle, paddingLeft: 40, border: `1px solid ${isDarkMode ? 'rgba(248,113,113,0.3)' : '#fecaca'}`}} /></div>
-                      <input type="text" placeholder="📝 輸入本日上課進度詳細描述" value={progress} onChange={e => setProgress(e.target.value)} style={inputStyle} />
+                      
+                      <div style={{ marginBottom: "15px" }}>
+                         <input type="text" placeholder="📝 輸入本日上課進度詳細描述" value={progress} onChange={e => setProgress(e.target.value)} style={{...inputStyle, margin: 0}} />
+                         {lastRecord && (
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "8px", marginLeft: "5px" }}>
+                               <Clock size={14} color={theme.primary} />
+                               <span style={{ fontSize: "12px", color: theme.textMuted }}>上次進度：{lastRecord.progress}</span>
+                               <button type="button" onClick={() => setProgress(lastRecord.progress)} style={{ background: `${theme.primary}20`, color: theme.primary, border: "none", borderRadius: "6px", padding: "2px 8px", cursor: "pointer", fontWeight: "bold", fontSize: "11px" }}>接續填寫</button>
+                            </div>
+                         )}
+                      </div>
+
                       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "15px", marginTop: "10px" }}><input type="text" placeholder="🏠 出題回家作業" value={homework} onChange={e => setHomework(e.target.value)} style={inputStyle} /><input type="text" placeholder="💡 給家長或學生的叮嚀備註" value={note} onChange={e => setNote(e.target.value)} style={inputStyle} /></div>
                       <button type="submit" style={btnStyle("#10b981")}>確認儲存紀錄</button>
                     </form>
-                    <div style={{ ...solidCardStyle, padding: "12px 20px", display: "flex", alignItems: "center", gap: "12px", marginTop: "20px" }}><Filter size={16} color={theme.textMuted} /><span style={{ fontSize: "14px", color: theme.textMuted, fontWeight: "bold" }}>科目快速篩選：</span><select value={historyFilter} onChange={e => setHistoryFilter(e.target.value)} style={{ ...selectStyle, width: "auto", padding: "6px 12px", margin: 0, background: theme.inputBg, fontSize: "13px" }}><option value="全部">全部顯示</option>{SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-                    <HistoryList data={historyData} type="class" theme={theme} isDarkMode={isDarkMode} onEdit={(item: any) => { setEditingId(item.id); setProgress(item.progress); setClassDate(item.class_date); setSubject(item.subject); setDuration(item.duration); setHomework(item.homework || ""); setNote(item.note || ""); setExpense(item.expense || ""); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onDelete={async (id: number, info: string) => { await supabase.from("class_logs").delete().eq("id", id); fetchHistoryData(); }} />
+
+                    <div style={{ ...solidCardStyle, padding: "12px 20px", display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: "center", justifyContent: "space-between", gap: "15px", marginTop: "20px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px", width: isMobile ? "100%" : "auto" }}>
+                            <Filter size={16} color={theme.textMuted} />
+                            <span style={{ fontSize: "14px", color: theme.textMuted, fontWeight: "bold", whiteSpace: "nowrap" }}>篩選：</span>
+                            <select value={historyFilter} onChange={e => setHistoryFilter(e.target.value)} style={{ ...selectStyle, width: "auto", padding: "6px 12px", margin: 0, background: theme.inputBg, fontSize: "13px", flex: 1 }}>
+                                <option value="全部">全部科目顯示</option>
+                                {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                        </div>
+                        <div style={{ position: "relative", width: isMobile ? "100%" : "250px" }}>
+                            <Search size={16} color={theme.textMuted} style={{ position: "absolute", left: "12px", top: "10px" }} />
+                            <input type="text" placeholder="關鍵字搜尋紀錄..." value={searchKeyword} onChange={e => setSearchKeyword(e.target.value)} style={{ ...inputStyle, margin: 0, padding: "8px 12px 8px 36px", fontSize: "13px" }} />
+                        </div>
+                    </div>
+                    <HistoryList data={filteredHistory} type="class" theme={theme} isDarkMode={isDarkMode} onEdit={(item: any) => { setEditingId(item.id); setProgress(item.progress); setClassDate(item.class_date); setSubject(item.subject); setDuration(item.duration); setHomework(item.homework || ""); setNote(item.note || ""); setExpense(item.expense || ""); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onDelete={async (id: number, info: string) => { await supabase.from("class_logs").delete().eq("id", id); fetchHistoryData(); }} />
                   </>
                 )}
 
@@ -530,8 +715,22 @@ export default function AdminPage() {
                       <input type="number" placeholder="考試得分" value={score} onChange={e => setScore(e.target.value)} style={inputStyle} />
                       <button type="submit" style={btnStyle("#3b82f6")}>儲存成績資料</button>
                     </form>
-                    <div style={{ ...solidCardStyle, padding: "12px 20px", display: "flex", alignItems: "center", gap: "12px", marginTop: "20px" }}><Filter size={16} color={theme.textMuted} /><span style={{ fontSize: "14px", color: theme.textMuted, fontWeight: "bold" }}>科目快速篩選：</span><select value={historyFilter} onChange={e => setHistoryFilter(e.target.value)} style={{ ...selectStyle, width: "auto", padding: "6px 12px", margin: 0, background: theme.inputBg, fontSize: "13px" }}><option value="全部">全部顯示</option>{SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-                    <HistoryList data={historyData} type="grade" theme={theme} isDarkMode={isDarkMode} onEdit={(item: any) => { setEditingId(item.id); setScore(item.score); setExamDate(item.exam_date); setSubject(item.subject); setUnit(item.unit || ""); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onDelete={async (id: number, info: string) => { await supabase.from("grades").delete().eq("id", id); fetchHistoryData(); }} />
+                    
+                    <div style={{ ...solidCardStyle, padding: "12px 20px", display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: "center", justifyContent: "space-between", gap: "15px", marginTop: "20px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px", width: isMobile ? "100%" : "auto" }}>
+                            <Filter size={16} color={theme.textMuted} />
+                            <span style={{ fontSize: "14px", color: theme.textMuted, fontWeight: "bold", whiteSpace: "nowrap" }}>篩選：</span>
+                            <select value={historyFilter} onChange={e => setHistoryFilter(e.target.value)} style={{ ...selectStyle, width: "auto", padding: "6px 12px", margin: 0, background: theme.inputBg, fontSize: "13px", flex: 1 }}>
+                                <option value="全部">全部科目顯示</option>
+                                {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                        </div>
+                        <div style={{ position: "relative", width: isMobile ? "100%" : "250px" }}>
+                            <Search size={16} color={theme.textMuted} style={{ position: "absolute", left: "12px", top: "10px" }} />
+                            <input type="text" placeholder="關鍵字搜尋紀錄..." value={searchKeyword} onChange={e => setSearchKeyword(e.target.value)} style={{ ...inputStyle, margin: 0, padding: "8px 12px 8px 36px", fontSize: "13px" }} />
+                        </div>
+                    </div>
+                    <HistoryList data={filteredHistory} type="grade" theme={theme} isDarkMode={isDarkMode} onEdit={(item: any) => { setEditingId(item.id); setScore(item.score); setExamDate(item.exam_date); setSubject(item.subject); setUnit(item.unit || ""); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onDelete={async (id: number, info: string) => { await supabase.from("grades").delete().eq("id", id); fetchHistoryData(); }} />
                   </>
                 )}
 
@@ -542,7 +741,14 @@ export default function AdminPage() {
                       <input type="number" placeholder="輸入增減點數 (加點輸入正數，扣點輸入負數，如: -5)" value={points} onChange={e => setPoints(e.target.value)} style={inputStyle} /><input type="text" placeholder="增減點數的原因註記" value={reason} onChange={e => setReason(e.target.value)} style={inputStyle} />
                       <button type="submit" style={btnStyle("#f59e0b")}>確認發放點數</button>
                     </form>
-                    <HistoryList data={historyData} type="point" theme={theme} isDarkMode={isDarkMode} onEdit={(item: any) => { setEditingId(item.id); setPoints(item.points); setReason(item.reason); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onDelete={async (id: number, info: string) => { await supabase.from("point_logs").delete().eq("id", id); fetchHistoryData(); }} />
+                    
+                    <div style={{ ...solidCardStyle, padding: "12px 20px", display: "flex", justifyContent: "flex-end", marginTop: "20px" }}>
+                        <div style={{ position: "relative", width: isMobile ? "100%" : "250px" }}>
+                            <Search size={16} color={theme.textMuted} style={{ position: "absolute", left: "12px", top: "10px" }} />
+                            <input type="text" placeholder="關鍵字搜尋紀錄..." value={searchKeyword} onChange={e => setSearchKeyword(e.target.value)} style={{ ...inputStyle, margin: 0, padding: "8px 12px 8px 36px", fontSize: "13px" }} />
+                        </div>
+                    </div>
+                    <HistoryList data={filteredHistory} type="point" theme={theme} isDarkMode={isDarkMode} onEdit={(item: any) => { setEditingId(item.id); setPoints(item.points); setReason(item.reason); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onDelete={async (id: number, info: string) => { await supabase.from("point_logs").delete().eq("id", id); fetchHistoryData(); }} />
                   </>
                 )}
 
@@ -678,7 +884,6 @@ export default function AdminPage() {
 
                       <div style={isMobile ? { overflowX: "auto", paddingBottom: "10px", WebkitOverflowScrolling: "touch" } : {}}>
                         <div style={isMobile ? { minWidth: "650px" } : {}}>
-                          {/* ★ 修正：加入 minmax(0, 1fr) 防止文字撐破版面 */}
                           <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", textAlign: "center", marginBottom: "10px", fontWeight: "bold", fontSize: "12px", color: theme.textMuted }}>
                               {WEEK_DAYS.map(d => <div key={d}>{d}</div>)}
                           </div>
