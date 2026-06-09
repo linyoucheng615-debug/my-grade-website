@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { User, Lock, BookOpen, MessageSquare, DollarSign, TrendingUp, Home, Calendar, Award, LogOut, Coins, FileText, ChevronDown, ChevronUp, Sun, Moon, Filter, Bell, Clock, AlertTriangle, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { User, Lock, BookOpen, MessageSquare, DollarSign, TrendingUp, Home, Calendar, Award, LogOut, Coins, FileText, ChevronDown, ChevronUp, Sun, Moon, Filter, Bell, Clock, AlertTriangle, ChevronLeft, ChevronRight, X, ShoppingBag } from "lucide-react";
 import { createClient } from '@supabase/supabase-js';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -40,6 +40,10 @@ export default function StudentPortal() {
 
   const [viewDate, setViewDate] = useState(new Date());
   const [calendarView, setCalendarView] = useState<"month" | "week">("month");
+
+  const [rewards, setRewards] = useState<any[]>([]);
+  // ★ 新增：學生背包狀態
+  const [inventory, setInventory] = useState<any[]>([]);
 
   useEffect(() => {
     const savedLogin = localStorage.getItem("studentLogin");
@@ -89,7 +93,6 @@ export default function StudentPortal() {
     shadow: isDarkMode ? "0 10px 40px rgba(0,0,0,0.5)" : "0 10px 40px rgba(14, 165, 233, 0.05)",
   };
 
-  // ★ 修正：學校段考改為酒紅色、活動改為湖水藍，避免撞色
   const getEventColor = (ev: any) => {
     if (ev.isCancelled || ev.type === 'cancellation') return isDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)";
     if (ev.type === 'exam') return "#be123c"; 
@@ -120,6 +123,13 @@ export default function StudentPortal() {
     const { data: grades } = await supabase.from("grades").select("*").eq("student_name", student.name).order("exam_date", { ascending: false });
     const { data: points } = await supabase.from("point_logs").select("*").eq("student_name", student.name).order("created_at", { ascending: false });
     const { data: rates } = await supabase.from("subject_rates").select("*").eq("student_name", student.name);
+    
+    const { data: rewardData } = await supabase.from("rewards").select("*").eq("is_active", true).order("points_required", { ascending: true });
+    setRewards(rewardData || []);
+
+    // ★ 撈取該學生的背包資料 (只撈未使用的)
+    const { data: invData } = await supabase.from("student_inventory").select("*").eq("student_name", student.name).eq("status", "unused").order("created_at", { ascending: false });
+    setInventory(invData || []);
 
     const { data: manualEvents } = await supabase.from("calendar_events").select("*").in('student_name', [student.name, '全體']);
     setCalendarEvents(manualEvents || []);
@@ -158,6 +168,63 @@ export default function StudentPortal() {
     setTuitionTotal(totalFee);
     setTuitionDetails(tDetails);
     setLoading(false);
+  };
+
+  // ★ 改寫：兌換商品時，同步發送到學生背包
+  const handleRedeem = async (reward: any) => {
+    if (studentData.totalPoints < reward.points_required) {
+      return alert("您的點數還不夠喔！再多努力學習累積點數吧 💪");
+    }
+
+    const confirmRedeem = window.confirm(`確定要花費 ${reward.points_required} 點兌換「${reward.title}」嗎？\n(兌換後商品將會放入您的「🎒 我的背包」)`);
+    if (!confirmRedeem) return;
+
+    setLoading(true);
+    
+    // 1. 扣除點數
+    const { error: pointError } = await supabase.from("point_logs").insert([{
+      student_name: studentData.info.name,
+      points: -reward.points_required,
+      reason: `🎁 兌換商品：${reward.title}`
+    }]);
+
+    // 2. 將商品放入背包 (student_inventory)
+    const { error: invError } = await supabase.from("student_inventory").insert([{
+      student_name: studentData.info.name,
+      reward_title: reward.title,
+      status: 'unused'
+    }]);
+
+    setLoading(false);
+
+    if (pointError || invError) {
+      alert("兌換發生錯誤，請聯絡老師處理！");
+    } else {
+      alert("🎉 兌換成功！商品已經放入「🎒 我的背包」囉！您可以隨時點擊使用！");
+      fetchStudentData(studentData.info.name, studentData.info.password);
+    }
+  };
+
+  // ★ 新增：學生點擊「立即使用」背包裡的商品
+  const handleUseItem = async (item: any) => {
+      const confirmUse = window.confirm(`確定要現在使用「${item.reward_title}」嗎？\n(⚠️ 使用後老師會立刻收到通知，且無法復原喔！)`);
+      if(!confirmUse) return;
+
+      setLoading(true);
+      // 將商品狀態更新為 'used'，並壓上使用時間
+      const { error } = await supabase.from("student_inventory").update({
+          status: 'used',
+          used_at: new Date().toISOString()
+      }).eq("id", item.id);
+      
+      setLoading(false);
+
+      if(error) {
+          alert("使用失敗: " + error.message);
+      } else {
+          alert("✅ 成功使用！老師已經收到通知囉！");
+          fetchStudentData(studentData.info.name, studentData.info.password);
+      }
   };
 
   const handleLogin = (e: React.FormEvent) => {
@@ -351,7 +418,6 @@ export default function StudentPortal() {
 
                   <div style={isMobile ? { overflowX: "auto", paddingBottom: "10px", WebkitOverflowScrolling: "touch" } : {}}>
                     <div style={isMobile ? { minWidth: "600px" } : {}}>
-                      {/* ★ 修正：加入 minmax(0, 1fr) 防止文字撐破版面 */}
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", textAlign: "center", marginBottom: "10px", fontWeight: "bold", fontSize: "12px", color: theme.textMuted }}>
                           {WEEK_DAYS.map(d => <div key={d} style={{ padding: "5px 0" }}>{d}</div>)}
                       </div>
@@ -495,14 +561,64 @@ export default function StudentPortal() {
           </div>
         )}
 
-        {/* 點數紀錄 */}
+        {/* 點數紀錄與兌換商店 */}
         {activeView === "points" && (
           <div style={{ animation: "fadeIn 0.4s ease" }}>
-              <h3 style={{ margin: "0 0 15px 0", fontSize: "18px", fontWeight: "bold", color: theme.textMain }}>💎 點數紀錄</h3>
-               <div style={{ background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)", color: "#ffffff", padding: "30px", borderRadius: "24px", marginBottom: "25px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 15px 35px rgba(245, 158, 11, 0.4)" }}>
-                   <div><div style={{ fontSize: "15px", opacity: 0.9, marginBottom: "5px" }}>目前累積</div><div style={{ fontSize: "42px", fontWeight: "900" }}>{studentData.totalPoints} <span style={{fontSize: "20px", fontWeight: "normal", opacity: 0.8}}>點</span></div></div>
+              <div style={{ background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)", color: "#ffffff", padding: "30px", borderRadius: "24px", marginBottom: "30px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 15px 35px rgba(245, 158, 11, 0.4)" }}>
+                   <div><div style={{ fontSize: "15px", opacity: 0.9, marginBottom: "5px" }}>目前累積點數</div><div style={{ fontSize: "42px", fontWeight: "900" }}>{studentData.totalPoints} <span style={{fontSize: "20px", fontWeight: "normal", opacity: 0.8}}>點</span></div></div>
                    <Award size={56} color="white" style={{ opacity: 0.8 }} />
-               </div>
+              </div>
+
+              {/* 🎁 點數兌換商城區塊 */}
+              <div style={{ marginBottom: "20px" }}>
+                  <h3 style={{ margin: "0 0 15px 0", fontSize: "18px", fontWeight: "bold", color: theme.textMain, display: "flex", alignItems: "center", gap: "8px" }}><ShoppingBag size={20} color="#14b8a6"/> 🎁 點數兌換區</h3>
+                  <div style={{ display: "flex", overflowX: "auto", gap: "15px", paddingBottom: "15px", scrollbarWidth: "none" }}>
+                      {rewards.length > 0 ? rewards.map(r => (
+                          <div key={r.id} style={{ minWidth: "200px", maxWidth: "240px", flexShrink: 0, background: theme.card, padding: "20px", borderRadius: "20px", border: `1px solid ${theme.border}`, boxShadow: theme.shadow, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                              <div>
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px" }}>
+                                      <div style={{ fontWeight: "900", color: theme.textMain, fontSize: "16px", lineHeight: "1.4" }}>{r.title}</div>
+                                  </div>
+                                  <div style={{ background: `${theme.primary}15`, color: theme.primary, display: "inline-block", padding: "4px 10px", borderRadius: "8px", fontSize: "13px", fontWeight: "bold", marginBottom: "10px" }}>💎 {r.points_required} 點</div>
+                                  {r.description && <div style={{ fontSize: "12px", color: theme.textMuted, lineHeight: "1.5", marginBottom: "15px" }}>{r.description}</div>}
+                              </div>
+                              <button 
+                                  onClick={() => handleRedeem(r)} 
+                                  style={{ width: "100%", background: studentData.totalPoints >= r.points_required ? "#14b8a6" : theme.inputBg, color: studentData.totalPoints >= r.points_required ? "#fff" : theme.textMuted, border: `1px solid ${studentData.totalPoints >= r.points_required ? "#14b8a6" : theme.border}`, padding: "10px", borderRadius: "10px", fontWeight: "bold", fontSize: "13px", cursor: studentData.totalPoints >= r.points_required ? "pointer" : "not-allowed", transition: "0.2s" }}
+                              >
+                                  {studentData.totalPoints >= r.points_required ? "立即兌換" : "點數不足"}
+                              </button>
+                          </div>
+                      )) : <div style={{ width: "100%", textAlign: "center", color: theme.textMuted, padding: "30px", background: theme.inputBg, borderRadius: "20px", border: `1px dashed ${theme.border}` }}>目前老師尚未上架任何商品喔！</div>}
+                  </div>
+              </div>
+
+              {/* 🎒 新增：我的背包 (未使用) */}
+              <h3 style={{ margin: "0 0 15px 0", fontSize: "18px", fontWeight: "bold", color: theme.textMain, borderTop: `2px dashed ${theme.border}`, paddingTop: "25px", display: "flex", alignItems: "center", gap: "8px" }}>
+                 🎒 我的背包 <span style={{fontSize: "13px", fontWeight: "normal", color: theme.textMuted}}>({inventory.length} 個未使用)</span>
+              </h3>
+              {inventory.length > 0 ? (
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "15px", marginBottom: "30px" }}>
+                      {inventory.map(item => (
+                          <div key={item.id} style={{ background: theme.card, padding: "18px", borderRadius: "16px", border: `1px solid ${theme.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: theme.shadow }}>
+                              <div>
+                                  <div style={{ fontWeight: "900", color: theme.textMain, fontSize: "15px" }}>{item.reward_title}</div>
+                                  <div style={{ fontSize: "12px", color: theme.textMuted, marginTop: "4px" }}>獲得於 {new Date(item.created_at).toLocaleDateString()}</div>
+                              </div>
+                              <button onClick={() => handleUseItem(item)} style={{ background: theme.primary, color: "#fff", border: "none", padding: "8px 16px", borderRadius: "8px", fontWeight: "bold", fontSize: "13px", cursor: "pointer", boxShadow: `0 4px 10px ${theme.primary}40`, transition: "0.2s" }}>
+                                  立即使用
+                              </button>
+                          </div>
+                      ))}
+                  </div>
+              ) : (
+                  <div style={{ width: "100%", textAlign: "center", color: theme.textMuted, padding: "30px", background: theme.inputBg, borderRadius: "20px", border: `1px dashed ${theme.border}`, marginBottom: "30px" }}>
+                      背包空空如也，趕快去累積點數兌換吧！
+                  </div>
+              )}
+
+              {/* 📜 歷史點數紀錄 */}
+              <h3 style={{ margin: "0 0 15px 0", fontSize: "18px", fontWeight: "bold", color: theme.textMain, borderTop: `2px dashed ${theme.border}`, paddingTop: "25px" }}>📜 點數異動紀錄</h3>
               <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
                   {studentData.points.map((point: any) => (
                   <div key={point.id} style={{ ...cardStyle, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px" }}>

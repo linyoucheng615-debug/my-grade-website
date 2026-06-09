@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { LogOut, Pencil, Trash2, User, Lock, BookOpen, MessageSquare, TrendingUp, Filter, Clock, DollarSign, Copy, Check, FileText, Sun, Moon, Home, Coins, UserPlus, GraduationCap, Users, X, AlertTriangle, Calendar as CalendarIcon, Plus, ChevronLeft, ChevronRight, ArrowLeft, Settings, Search } from "lucide-react";
+import { LogOut, Pencil, Trash2, User, Lock, BookOpen, MessageSquare, TrendingUp, Filter, Clock, DollarSign, Copy, Check, FileText, Sun, Moon, Home, Coins, UserPlus, GraduationCap, Users, X, AlertTriangle, Calendar as CalendarIcon, Plus, ChevronLeft, ChevronRight, ArrowLeft, Settings, Search, ShoppingBag } from "lucide-react";
 import { createClient } from '@supabase/supabase-js';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
@@ -97,9 +97,18 @@ export default function AdminPage() {
   const [searchKeyword, setSearchKeyword] = useState("");
   const [lastRecord, setLastRecord] = useState<any>(null);
 
-  // ★ 新增：儀表板專用狀態
   const [dashboardLowGrades, setDashboardLowGrades] = useState<any[]>([]);
   const [dashboardMissingLogs, setDashboardMissingLogs] = useState<any[]>([]);
+  
+  // ★ 核銷通知狀態
+  const [recentRedeems, setRecentRedeems] = useState<any[]>([]);
+
+  // 點數商品狀態
+  const [rewards, setRewards] = useState<any[]>([]);
+  const [rewardTitle, setRewardTitle] = useState("");
+  const [rewardPoints, setRewardPoints] = useState("");
+  const [rewardDesc, setRewardDesc] = useState("");
+  const [confirmRewardId, setConfirmRewardId] = useState<number | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem("teacherName");
@@ -118,7 +127,7 @@ export default function AdminPage() {
     if (currentTeacher && selectedName) {
       fetchRates();
     }
-    if (currentTeacher && selectedName && selectedFeature && selectedFeature !== 'dashboard') {
+    if (currentTeacher && selectedName && selectedFeature && selectedFeature !== 'dashboard' && selectedFeature !== 'reward') {
       resetForm();
       setHistoryFilter("全部");
       setSearchKeyword(""); 
@@ -128,7 +137,7 @@ export default function AdminPage() {
   }, [selectedName, selectedFeature, currentTeacher]);
 
   useEffect(() => {
-    if (currentTeacher && selectedName && selectedFeature && selectedFeature !== 'dashboard') fetchHistoryData();
+    if (currentTeacher && selectedName && selectedFeature && selectedFeature !== 'dashboard' && selectedFeature !== 'reward') fetchHistoryData();
   }, [historyFilter]);
 
   useEffect(() => {
@@ -143,26 +152,26 @@ export default function AdminPage() {
     }
   }, [selectedFeature, selectedName, subject]);
 
-  // ★ 新增：當選擇儀表板時，自動抓取全域資料
   useEffect(() => {
     if (selectedFeature === 'dashboard' && currentTeacher) {
         fetchDashboardData();
+    }
+    if (selectedFeature === 'reward' && currentTeacher) {
+        fetchRewards();
     }
   }, [selectedFeature, calendarEvents]);
 
   const fetchDashboardData = async () => {
       setLoading(true);
-      // 1. 低分預警 (考不到 60 分的紀錄，抓近期 10 筆)
       const { data: grades } = await supabase.from("grades")
           .select("*").lt("score", 60).order("exam_date", { ascending: false }).limit(10);
       setDashboardLowGrades(grades || []);
 
-      // 2. 待補進度提醒 (比對過去 7 天的行事曆與上課紀錄)
       const today = new Date();
       const missing: any[] = [];
       const past7Days = Array.from({length: 7}, (_, i) => {
           const d = new Date(today);
-          d.setDate(today.getDate() - i - 1); // 過去 7 天 (不含今天)
+          d.setDate(today.getDate() - i - 1); 
           return d.toISOString().slice(0, 10);
       });
 
@@ -172,7 +181,6 @@ export default function AdminPage() {
       past7Days.forEach(dateStr => {
           const dayEvents = getEventsForDate(dateStr);
           dayEvents.forEach(ev => {
-              // 找出有排課、沒取消、且有指定學生的事件
               if (ev.type === 'class' && !ev.isCancelled && ev.student_name !== '全體') {
                   if (!logsMap.has(`${ev.student_name}_${dateStr}`)) {
                       missing.push({ student_name: ev.student_name, date: dateStr, title: ev.title });
@@ -181,7 +189,53 @@ export default function AdminPage() {
           });
       });
       setDashboardMissingLogs(missing);
+
+      // ★ 撈取最近 5 筆「已使用」的兌換券 (核銷通知)
+      const { data: redeems } = await supabase.from("student_inventory")
+          .select("*").eq("status", "used").order("used_at", { ascending: false }).limit(5);
+      setRecentRedeems(redeems || []);
+
       setLoading(false);
+  };
+
+  const fetchRewards = async () => {
+      setLoading(true);
+      const { data } = await supabase.from("rewards").select("*").order("is_active", { ascending: false }).order("points_required", { ascending: true });
+      setRewards(data || []);
+      setLoading(false);
+  };
+
+  const handleAddReward = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!rewardTitle.trim() || !rewardPoints) return alert("請輸入商品名稱與所需點數");
+      setLoading(true);
+      const { error } = await supabase.from("rewards").insert([{
+          title: rewardTitle.trim(),
+          points_required: Number(rewardPoints),
+          description: rewardDesc.trim() || null,
+          is_active: true
+      }]);
+      setLoading(false);
+      if (error) {
+          alert("上架失敗：" + error.message);
+      } else {
+          setRewardTitle("");
+          setRewardPoints("");
+          setRewardDesc("");
+          fetchRewards();
+      }
+  };
+
+  const handleToggleReward = async (id: number, currentStatus: boolean) => {
+      setLoading(true);
+      await supabase.from("rewards").update({ is_active: !currentStatus }).eq("id", id);
+      fetchRewards();
+  };
+
+  const handleDeleteReward = async (id: number) => {
+      setLoading(true);
+      await supabase.from("rewards").delete().eq("id", id);
+      fetchRewards();
   };
 
   const toggleTheme = () => {
@@ -414,7 +468,6 @@ export default function AdminPage() {
     setLoading(false);
     if (error) alert(error.message);
     else { 
-      alert("🎉 儲存成功！"); 
       resetForm(); 
       fetchHistoryData(); 
       fetchStudentDetails();
@@ -422,6 +475,7 @@ export default function AdminPage() {
          const { data } = await supabase.from("class_logs").select("*").eq("student_name", selectedName).eq("subject", subject).order("class_date", { ascending: false }).limit(1);
          setLastRecord(data && data.length > 0 ? data[0] : null);
       }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
@@ -537,7 +591,6 @@ export default function AdminPage() {
                 <h2 style={{ fontSize: "18px", fontWeight: "900", color: theme.textMain, marginBottom: "20px" }}>🚀 請選擇要執行的功能</h2>
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "15px" }}>
                     
-                    {/* ★ 新增：今日看板總覽 */}
                     <div onClick={() => setSelectedFeature('dashboard')} style={{ ...solidCardStyle, cursor: "pointer", borderLeft: `6px solid ${theme.primary}`, display: "flex", alignItems: "center", gap: "15px", marginBottom: 0, gridColumn: isMobile ? "auto" : "span 2" }}>
                         <div style={{ background: `${theme.primary}20`, padding: "12px", borderRadius: "12px" }}><Home size={24} color={theme.primary} /></div>
                         <div><div style={{ fontWeight: "900", fontSize: "16px", color: theme.textMain }}>🏠 老師今日看板</div><div style={{ fontSize: "12px", color: theme.textMuted, marginTop: "4px" }}>今日課表、未填紀錄與低分預警</div></div>
@@ -555,6 +608,12 @@ export default function AdminPage() {
                         <div style={{ background: "#f59e0b20", padding: "12px", borderRadius: "12px" }}><Coins size={24} color="#f59e0b" /></div>
                         <div><div style={{ fontWeight: "900", fontSize: "16px", color: theme.textMain }}>💎 獎勵點數發放</div><div style={{ fontSize: "12px", color: theme.textMuted, marginTop: "4px" }}>加扣點數與原因註記</div></div>
                     </div>
+
+                    <div onClick={() => setSelectedFeature('reward')} style={{ ...solidCardStyle, cursor: "pointer", borderLeft: `6px solid #14b8a6`, display: "flex", alignItems: "center", gap: "15px", marginBottom: 0 }}>
+                        <div style={{ background: "#14b8a620", padding: "12px", borderRadius: "12px" }}><ShoppingBag size={24} color="#14b8a6" /></div>
+                        <div><div style={{ fontWeight: "900", fontSize: "16px", color: theme.textMain }}>🎁 點數商品管理</div><div style={{ fontSize: "12px", color: theme.textMuted, marginTop: "4px" }}>上架兌換獎勵與設定</div></div>
+                    </div>
+
                     <div onClick={() => setSelectedFeature('calendar')} style={{ ...solidCardStyle, cursor: "pointer", borderLeft: `6px solid #8b5cf6`, display: "flex", alignItems: "center", gap: "15px", marginBottom: 0 }}>
                         <div style={{ background: "#8b5cf620", padding: "12px", borderRadius: "12px" }}><CalendarIcon size={24} color="#8b5cf6" /></div>
                         <div><div style={{ fontWeight: "900", fontSize: "16px", color: theme.textMain }}>🗓️ 日程與行事曆</div><div style={{ fontSize: "12px", color: theme.textMuted, marginTop: "4px" }}>排定日程與單日停課</div></div>
@@ -577,8 +636,7 @@ export default function AdminPage() {
                     <ArrowLeft size={16} /> 返回功能選單
                 </button>
 
-                {/* ★ 當選擇儀表板時，不顯示指定學生的下拉選單 */}
-                {selectedFeature !== 'calendar' && selectedFeature !== 'dashboard' && (
+                {selectedFeature !== 'calendar' && selectedFeature !== 'dashboard' && selectedFeature !== 'reward' && (
                     <div style={{ ...solidCardStyle, padding: "20px" }}>
                         <label style={{ fontWeight: "900", display: "block", marginBottom: "12px", color: theme.primary, fontSize: "14px", letterSpacing: "1px" }}>👤 指定要操作的學生：</label>
                         <select value={selectedName} onChange={e => setSelectedName(e.target.value)} style={{ ...selectStyle, background: theme.inputBg, fontSize: "18px", fontWeight: "bold", color: theme.textMain, border: `1px solid ${theme.border}`, padding: "12px 15px", margin: 0 }}>
@@ -587,12 +645,11 @@ export default function AdminPage() {
                     </div>
                 )}
 
-                {/* ======================= 【儀表板 Dashboard UI】 ======================= */}
+                {/* ★ 老師 Dashboard：新增核銷通知欄位 */}
                 {selectedFeature === 'dashboard' && (
                   <div style={{ animation: "fadeIn 0.4s ease" }}>
                       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "20px" }}>
                           
-                          {/* 📌 今日課表 */}
                           <div style={solidCardStyle}>
                              <h3 style={{ margin: "0 0 15px 0", color: theme.primary, display: "flex", alignItems: "center", gap: "8px" }}><CalendarIcon size={20}/> 📌 今日排程</h3>
                              {getEventsForDate(new Date().toISOString().slice(0, 10)).filter(e => !e.isCancelled).length > 0 ? (
@@ -610,7 +667,6 @@ export default function AdminPage() {
                              ) : <div style={{ color: theme.textMuted, fontSize: "14px", textAlign: "center", padding: "20px", background: theme.inputBg, borderRadius: "12px", border: `1px dashed ${theme.border}` }}>今日無排定行程 🎉</div>}
                           </div>
 
-                          {/* 📝 待補紀錄 */}
                           <div style={solidCardStyle}>
                              <h3 style={{ margin: "0 0 15px 0", color: "#f59e0b", display: "flex", alignItems: "center", gap: "8px" }}><AlertTriangle size={20}/> 📝 待補進度提醒 (近7日)</h3>
                              {dashboardMissingLogs.length > 0 ? (
@@ -628,30 +684,39 @@ export default function AdminPage() {
                              ) : <div style={{ color: theme.textMuted, fontSize: "14px", textAlign: "center", padding: "20px", background: theme.inputBg, borderRadius: "12px", border: `1px dashed ${theme.border}` }}>所有紀錄皆已填寫完畢 ✅</div>}
                           </div>
 
-                          {/* ⚠️ 低分預警 */}
-                          <div style={{...solidCardStyle, gridColumn: isMobile ? "auto" : "span 2"}}>
-                             <h3 style={{ margin: "0 0 15px 0", color: theme.danger, display: "flex", alignItems: "center", gap: "8px" }}><TrendingUp size={20} style={{transform: "scaleY(-1)"}}/> ⚠️ 近期低分預警 (&lt;60分)</h3>
-                             {dashboardLowGrades.length > 0 ? (
-                                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: "10px" }}>
-                                     {dashboardLowGrades.map((g, idx) => (
-                                         <div key={idx} style={{ padding: "15px", background: theme.inputBg, borderRadius: "12px", borderTop: `4px solid ${theme.danger}`, border: `1px solid ${theme.border}` }}>
-                                             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-                                                 <span style={{ fontSize: "15px", fontWeight: "bold", color: theme.textMain }}>{g.student_name}</span>
-                                                 <span style={{ fontSize: "12px", color: theme.textMuted }}>{g.exam_date}</span>
+                          {/* ★ 新增：最新核銷通知區塊 */}
+                          <div style={{...solidCardStyle}}>
+                             <h3 style={{ margin: "0 0 15px 0", color: theme.success, display: "flex", alignItems: "center", gap: "8px" }}><Check size={20}/> 🔔 最新核銷通知</h3>
+                             {recentRedeems.length > 0 ? (
+                                 <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                                     {recentRedeems.map((r, idx) => (
+                                         <div key={idx} style={{ padding: "12px", background: theme.inputBg, borderRadius: "12px", border: `1px solid ${theme.success}` }}>
+                                             <div style={{ fontSize: "14px", color: theme.textMain }}>
+                                                 <b>{r.student_name}</b> 使用了 <b>{r.reward_title}</b>
                                              </div>
-                                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                                                 <div>
-                                                     <div style={{ fontSize: "13px", fontWeight: "bold", color: theme.textMuted }}>{g.subject}</div>
-                                                     <div style={{ fontSize: "11px", color: theme.textMuted, marginTop: "2px" }}>{g.unit}</div>
-                                                 </div>
-                                                 <div style={{ fontSize: "28px", fontWeight: "900", color: theme.danger }}>{g.score}</div>
-                                             </div>
+                                             <div style={{ fontSize: "11px", color: theme.textMuted, marginTop: "4px" }}>使用時間: {new Date(r.used_at).toLocaleString()}</div>
                                          </div>
                                      ))}
                                  </div>
-                             ) : <div style={{ color: theme.textMuted, fontSize: "14px", textAlign: "center", padding: "20px", background: theme.inputBg, borderRadius: "12px", border: `1px dashed ${theme.border}` }}>近期無低於 60 分之紀錄 🎊</div>}
+                             ) : <div style={{ color: theme.textMuted, fontSize: "14px", textAlign: "center", padding: "20px" }}>暫無學生核銷獎勵</div>}
                           </div>
 
+                          <div style={{...solidCardStyle}}>
+                             <h3 style={{ margin: "0 0 15px 0", color: theme.danger, display: "flex", alignItems: "center", gap: "8px" }}><TrendingUp size={20} style={{transform: "scaleY(-1)"}}/> ⚠️ 近期低分預警 (&lt;60分)</h3>
+                             {dashboardLowGrades.length > 0 ? (
+                                 <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                                     {dashboardLowGrades.map((g, idx) => (
+                                         <div key={idx} style={{ padding: "12px", background: theme.inputBg, borderRadius: "12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                             <div>
+                                                 <div style={{ fontSize: "14px", fontWeight: "bold", color: theme.textMain }}>{g.student_name} - {g.subject}</div>
+                                                 <div style={{ fontSize: "12px", color: theme.textMuted }}>{g.unit}</div>
+                                             </div>
+                                             <div style={{ fontSize: "20px", fontWeight: "900", color: theme.danger }}>{g.score}</div>
+                                         </div>
+                                     ))}
+                                 </div>
+                             ) : <div style={{ color: theme.textMuted, fontSize: "14px", textAlign: "center", padding: "20px" }}>近期無低分紀錄 🎊</div>}
+                          </div>
                       </div>
                   </div>
                 )}
@@ -752,67 +817,55 @@ export default function AdminPage() {
                   </>
                 )}
 
-                {selectedFeature === 'tuition' && (
-                  <>
-                    <div style={solidCardStyle}>
-                      <h3 style={{color: theme.textMain, marginBottom: "20px"}}>💰 月底學費結算與明細生成</h3>
-                      <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}><input type="month" value={tuitionMonth} onChange={e => setTuitionMonth(e.target.value)} style={{...inputStyle, width: "auto", flex: 1, minWidth: "140px"}} /><button onClick={handleTuitionCheck} style={{...btnStyle(theme.danger), width: "auto", marginTop: 0, padding: "12px 24px", whiteSpace: "nowrap"}}>核算學費</button><button onClick={generateBillingText} style={{...btnStyle("#6366f1"), width: "auto", marginTop: 0, padding: "12px 24px", display: "flex", alignItems: "center", gap: "8px", whiteSpace: "nowrap"}}><FileText size={18} /> 生成複製明細</button></div>
-                      {billingText && (
-                        <div style={{ marginTop: "25px", position: "relative", animation: "fadeIn 0.3s ease" }}>
-                          <label style={{fontWeight: "bold", color: "#6366f1", marginBottom: "8px", display: "block"}}>👇 點擊右側按鈕一鍵複製文字傳給家長：</label>
-                          <textarea value={billingText} onChange={(e) => setBillingText(e.target.value)} style={{ width: "100%", height: "220px", padding: "18px", borderRadius: "16px", border: `2px solid ${isDarkMode ? "#4338ca" : "#6366f1"}`, fontSize: "14px", fontFamily: "monospace", resize: "none", background: isDarkMode ? "#1e1b4b" : "#f5f3ff", color: theme.textMain, lineHeight: "1.6" }} />
-                          <button onClick={copyToClipboard} style={{ position: "absolute", top: "40px", right: "12px", background: isCopied ? theme.success : theme.card, color: isCopied ? "white" : theme.textMain, border: `1px solid ${theme.border}`, padding: "8px 16px", borderRadius: "8px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", transition: "0.2s", boxShadow: theme.shadow }}>{isCopied ? <Check size={14}/> : <Copy size={14}/>} {isCopied ? "已複製" : "複製文字"}</button>
-                        </div>
-                      )}
-                      {tuitionDetails.length > 0 && (
-                        <div style={{ marginTop: "25px", borderTop: `2px dashed ${theme.border}`, paddingTop: "20px" }}>
-                          {tuitionDetails.map(t => (
-                            <div key={t.id} style={{ display: "flex", justifyContent: "space-between", padding: "15px", background: theme.inputBg, borderRadius: "14px", marginBottom: "10px", border: `1px solid ${theme.border}` }}>
-                              <div><div style={{fontWeight: "900", fontSize: "15px", color: theme.textMain}}>{t.class_date} <span style={{fontSize: "12px", color: theme.textMuted, fontWeight: "normal"}}>({t.subject})</span></div><div style={{fontSize: "13px", color: theme.textMuted, marginTop: "4px"}}>{t.duration} hr × ${t.rate}/hr {t.extra > 0 && <span style={{color: theme.danger, fontWeight: "bold"}}> + 雜費 {t.extra}</span>}</div></div>
-                              <span style={{ fontWeight: "900", color: theme.danger, display: "flex", alignItems: "center", fontSize: "18px" }}>${t.total}</span>
-                            </div>
-                          ))}
-                          <div style={{ textAlign: "right", fontSize: "28px", fontWeight: "900", marginTop: "20px", color: theme.danger, borderTop: `2px solid ${theme.border}`, paddingTop: "15px" }}>本月學費總計：${tuitionDetails.reduce((a,b)=>a+b.total,0).toLocaleString()} 元</div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div style={{ ...solidCardStyle, marginTop: "25px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-                        <h3 style={{color: theme.textMain, margin: 0}}>⚙️ 客製化各學科時薪設定</h3>
-                        <button onClick={handleSaveAllRates} disabled={loading} style={{ background: theme.primary, color: "#fff", border: "none", padding: "8px 16px", borderRadius: "10px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}>💾 儲存時薪設定</button>
-                      </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "12px" }}>
-                        {SUBJECTS.map(sub => (
-                          <div key={`${selectedName}-${sub}`} style={{ display: "flex", alignItems: "center", gap: "10px", background: theme.inputBg, padding: "12px", borderRadius: "12px", border: `1px solid ${theme.border}` }}>
-                              <span style={{ fontSize: "14px", fontWeight: "bold", color: theme.textMain, minWidth: "40px" }}>{sub}</span>
-                              <input type="number" value={localRates[sub] !== undefined ? localRates[sub] : ''} onChange={e => setLocalRates({...localRates, [sub]: Number(e.target.value)})} placeholder="0" style={{ width: "100%", padding: "8px", borderRadius: "8px", border: `1px solid ${theme.border}`, background: theme.activeControl, color: theme.textMain, textAlign: "center" }} />
+                {/* ★ 點數商品管理區塊 */}
+                {selectedFeature === 'reward' && (
+                  <div style={{ animation: "fadeIn 0.4s ease" }}>
+                      <form onSubmit={handleAddReward} style={solidCardStyle}>
+                          <h3 style={{color: theme.textMain, marginBottom: "20px", display: "flex", alignItems: "center", gap: "8px"}}><Plus size={20}/> 🎁 上架新點數商品</h3>
+                          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr", gap: "15px", marginBottom: "15px" }}>
+                              <input type="text" placeholder="商品名稱 (例: 免寫作業券、便利商店飲料)" value={rewardTitle} onChange={e => setRewardTitle(e.target.value)} style={{...inputStyle, margin: 0}} />
+                              <div style={{position:"relative"}}>
+                                  <input type="number" placeholder="所需點數" value={rewardPoints} onChange={e => setRewardPoints(e.target.value)} style={{...inputStyle, margin: 0, paddingRight: "40px"}} />
+                                  <span style={{position:"absolute", right: 15, top: 12, fontSize: 13, color: theme.textMuted}}>點</span>
+                              </div>
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                )}
+                          <input type="text" placeholder="📝 商品備註說明 (選填，例如：限兌換一次)" value={rewardDesc} onChange={e => setRewardDesc(e.target.value)} style={{...inputStyle, marginBottom: "15px"}} />
+                          <button type="submit" disabled={loading} style={btnStyle("#14b8a6")}>確認上架商品</button>
+                      </form>
 
-                {selectedFeature === 'report' && (
-                  <div style={solidCardStyle}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}><h3 style={{color: theme.textMain, margin: 0, fontWeight: "900"}}>📊 單科成績分析走勢圖</h3>{gradeFilter && <div style={{ fontSize: "14px", fontWeight: "bold", color: theme.textMain, background: theme.inputBg, border: `1px solid ${theme.border}`, padding: "8px 16px", borderRadius: "20px", boxShadow: theme.shadow }}>{gradeFilter}平均：<span style={{ color: COLORS[gradeFilter] || theme.primary, fontSize: "18px" }}>{currentAvgNum}</span> 分</div>}</div>
-                    <div style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "15px", marginBottom: "15px" }}>{availableSubjects.map((sub: any) => <button key={sub} onClick={() => setGradeFilter(sub)} style={filterBtnStyle(gradeFilter === sub, COLORS[sub])}>{sub}</button>)}</div>
-                    {currentChartDataArr.length > 0 ? (
-                      <>
-                        <div style={{ height: "320px", marginBottom: "20px" }}><ResponsiveContainer width="100%" height="100%"><LineChart data={currentChartDataArr}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.border} /><XAxis dataKey="date" stroke={theme.border} tick={{fill: theme.textMuted, fontSize: 12}} /><YAxis domain={[0, 100]} stroke={theme.border} tick={{fill: theme.textMuted, fontSize: 12}} /><Tooltip contentStyle={{backgroundColor: theme.activeControl, borderColor: theme.border, color: theme.textMain, borderRadius: "12px"}} /><Legend /><Line type="monotone" dataKey="score" name={gradeFilter} stroke={COLORS[gradeFilter] || theme.primary} strokeWidth={4} dot={{ r: 6, fill: theme.activeControl, strokeWidth: 3 }} /></LineChart></ResponsiveContainer></div>
-                        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr", gap: "15px" }}>
-                            {chartData.filter((g: any) => g.subject === gradeFilter).map((g: any) => (
-                                <div key={g.id} style={{ background: theme.inputBg, padding: "20px", borderRadius: "16px", border: `1px solid ${theme.border}`, borderTop: `4px solid ${COLORS[g.subject] || theme.primary}`, textAlign: "center", boxShadow: theme.shadow }}>
-                                    <div style={{ fontSize: "12px", color: theme.textMuted, marginBottom: "8px" }}>{g.exam_date}</div>
-                                    <div style={{ fontSize: "15px", fontWeight: "bold", color: theme.textMain }}>{g.subject}</div>
-                                    <div style={{ fontSize: "32px", fontWeight: "900", margin: "10px 0", color: g.score >= 60 ? (COLORS[g.subject] || theme.primary) : theme.danger }}>{g.score}</div>
-                                    <div style={{ fontSize: "12px", color: theme.textMuted }}>{g.unit}</div>
-                                </div>
-                            ))}
-                        </div>
-                      </>
-                    ) : <div style={{ height: "180px", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textMuted, border: `1px dashed ${theme.border}`, borderRadius: "20px" }}>尚無足夠的考試紀錄</div>}
+                      <div style={{ ...solidCardStyle, padding: "20px" }}>
+                          <h3 style={{color: theme.textMain, margin: "0 0 20px 0", display: "flex", alignItems: "center", gap: "8px"}}><ShoppingBag size={20}/> 🛒 目前架上與歷史商品</h3>
+                          
+                          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "15px" }}>
+                              {rewards.map(r => (
+                                  <div key={r.id} style={{ background: theme.inputBg, padding: "18px", borderRadius: "16px", border: `1px solid ${theme.border}`, opacity: r.is_active ? 1 : 0.6, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                                      <div>
+                                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+                                              <div style={{ fontWeight: "900", color: theme.textMain, fontSize: "16px", lineHeight: "1.4" }}>{r.title}</div>
+                                              <span style={{ background: `${theme.primary}20`, color: theme.primary, padding: "4px 10px", borderRadius: "8px", fontSize: "13px", fontWeight: "bold", whiteSpace: "nowrap" }}>💎 {r.points_required} 點</span>
+                                          </div>
+                                          {r.description && <div style={{ fontSize: "13px", color: theme.textMuted, lineHeight: "1.5", marginBottom: "15px" }}>{r.description}</div>}
+                                      </div>
+                                      
+                                      <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "15px", paddingTop: "15px", borderTop: `1px dashed ${theme.border}` }}>
+                                          <button onClick={() => handleToggleReward(r.id, r.is_active)} style={{ background: r.is_active ? "transparent" : theme.success, color: r.is_active ? theme.textMuted : "#fff", border: `1px solid ${r.is_active ? theme.border : theme.success}`, padding: "6px 12px", borderRadius: "8px", fontSize: "12px", cursor: "pointer", fontWeight: "bold" }}>
+                                              {r.is_active ? "隱藏下架" : "重新上架"}
+                                          </button>
+                                          
+                                          {confirmRewardId === r.id ? (
+                                              <div style={{ display: "flex", gap: "6px" }}>
+                                                  <button onClick={() => { handleDeleteReward(r.id); setConfirmRewardId(null); }} style={{ background: theme.danger, color: "#fff", border: "none", padding: "6px 12px", borderRadius: "8px", fontSize: "12px", cursor: "pointer", fontWeight: "bold" }}>確定刪除</button>
+                                                  <button onClick={() => setConfirmRewardId(null)} style={{ background: theme.card, color: theme.textMain, border: `1px solid ${theme.border}`, padding: "6px 12px", borderRadius: "8px", fontSize: "12px", cursor: "pointer" }}>取消</button>
+                                              </div>
+                                          ) : (
+                                              <button onClick={() => setConfirmRewardId(r.id)} style={{ background: `${theme.danger}15`, color: theme.danger, border: "none", padding: "6px 12px", borderRadius: "8px", cursor: "pointer", display: "flex", alignItems: "center" }}><Trash2 size={16}/></button>
+                                          )}
+                                      </div>
+                                  </div>
+                              ))}
+                          </div>
+                          {rewards.length === 0 && <div style={{ textAlign: "center", color: theme.textMuted, padding: "30px", border: `1px dashed ${theme.border}`, borderRadius: "16px" }}>目前沒有設定任何點數商品</div>}
+                      </div>
                   </div>
                 )}
 
@@ -978,6 +1031,70 @@ export default function AdminPage() {
                           </div>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {selectedFeature === 'tuition' && (
+                  <>
+                    <div style={solidCardStyle}>
+                      <h3 style={{color: theme.textMain, marginBottom: "20px"}}>💰 月底學費結算與明細生成</h3>
+                      <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}><input type="month" value={tuitionMonth} onChange={e => setTuitionMonth(e.target.value)} style={{...inputStyle, width: "auto", flex: 1, minWidth: "140px"}} /><button onClick={handleTuitionCheck} style={{...btnStyle(theme.danger), width: "auto", marginTop: 0, padding: "12px 24px", whiteSpace: "nowrap"}}>核算學費</button><button onClick={generateBillingText} style={{...btnStyle("#6366f1"), width: "auto", marginTop: 0, padding: "12px 24px", display: "flex", alignItems: "center", gap: "8px", whiteSpace: "nowrap"}}><FileText size={18} /> 生成複製明細</button></div>
+                      {billingText && (
+                        <div style={{ marginTop: "25px", position: "relative", animation: "fadeIn 0.3s ease" }}>
+                          <label style={{fontWeight: "bold", color: "#6366f1", marginBottom: "8px", display: "block"}}>👇 點擊右側按鈕一鍵複製文字傳給家長：</label>
+                          <textarea value={billingText} onChange={(e) => setBillingText(e.target.value)} style={{ width: "100%", height: "220px", padding: "18px", borderRadius: "16px", border: `2px solid ${isDarkMode ? "#4338ca" : "#6366f1"}`, fontSize: "14px", fontFamily: "monospace", resize: "none", background: isDarkMode ? "#1e1b4b" : "#f5f3ff", color: theme.textMain, lineHeight: "1.6" }} />
+                          <button onClick={copyToClipboard} style={{ position: "absolute", top: "40px", right: "12px", background: isCopied ? theme.success : theme.card, color: isCopied ? "white" : theme.textMain, border: `1px solid ${theme.border}`, padding: "8px 16px", borderRadius: "8px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", transition: "0.2s", boxShadow: theme.shadow }}>{isCopied ? <Check size={14}/> : <Copy size={14}/>} {isCopied ? "已複製" : "複製文字"}</button>
+                        </div>
+                      )}
+                      {tuitionDetails.length > 0 && (
+                        <div style={{ marginTop: "25px", borderTop: `2px dashed ${theme.border}`, paddingTop: "20px" }}>
+                          {tuitionDetails.map(t => (
+                            <div key={t.id} style={{ display: "flex", justifyContent: "space-between", padding: "15px", background: theme.inputBg, borderRadius: "14px", marginBottom: "10px", border: `1px solid ${theme.border}` }}>
+                              <div><div style={{fontWeight: "900", fontSize: "15px", color: theme.textMain}}>{t.class_date} <span style={{fontSize: "12px", color: theme.textMuted, fontWeight: "normal"}}>({t.subject})</span></div><div style={{fontSize: "13px", color: theme.textMuted, marginTop: "4px"}}>{t.duration} hr × ${t.rate}/hr {t.extra > 0 && <span style={{color: theme.danger, fontWeight: "bold"}}> + 雜費 {t.extra}</span>}</div></div>
+                              <span style={{ fontWeight: "900", color: theme.danger, display: "flex", alignItems: "center", fontSize: "18px" }}>${t.total}</span>
+                            </div>
+                          ))}
+                          <div style={{ textAlign: "right", fontSize: "28px", fontWeight: "900", marginTop: "20px", color: theme.danger, borderTop: `2px solid ${theme.border}`, paddingTop: "15px" }}>本月學費總計：${tuitionDetails.reduce((a,b)=>a+b.total,0).toLocaleString()} 元</div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ ...solidCardStyle, marginTop: "25px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+                        <h3 style={{color: theme.textMain, margin: 0}}>⚙️ 客製化各學科時薪設定</h3>
+                        <button onClick={handleSaveAllRates} disabled={loading} style={{ background: theme.primary, color: "#fff", border: "none", padding: "8px 16px", borderRadius: "10px", fontWeight: "bold", cursor: "pointer", transition: "0.2s" }}>💾 儲存時薪設定</button>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "12px" }}>
+                        {SUBJECTS.map(sub => (
+                          <div key={`${selectedName}-${sub}`} style={{ display: "flex", alignItems: "center", gap: "10px", background: theme.inputBg, padding: "12px", borderRadius: "12px", border: `1px solid ${theme.border}` }}>
+                              <span style={{ fontSize: "14px", fontWeight: "bold", color: theme.textMain, minWidth: "40px" }}>{sub}</span>
+                              <input type="number" value={localRates[sub] !== undefined ? localRates[sub] : ''} onChange={e => setLocalRates({...localRates, [sub]: Number(e.target.value)})} placeholder="0" style={{ width: "100%", padding: "8px", borderRadius: "8px", border: `1px solid ${theme.border}`, background: theme.activeControl, color: theme.textMain, textAlign: "center" }} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {selectedFeature === 'report' && (
+                  <div style={solidCardStyle}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}><h3 style={{color: theme.textMain, margin: 0, fontWeight: "900"}}>📊 單科成績分析走勢圖</h3>{gradeFilter && <div style={{ fontSize: "14px", fontWeight: "bold", color: theme.textMain, background: theme.inputBg, border: `1px solid ${theme.border}`, padding: "8px 16px", borderRadius: "20px", boxShadow: theme.shadow }}>{gradeFilter}平均：<span style={{ color: COLORS[gradeFilter] || theme.primary, fontSize: "18px" }}>{currentAvgNum}</span> 分</div>}</div>
+                    <div style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "15px", marginBottom: "15px" }}>{availableSubjects.map((sub: any) => <button key={sub} onClick={() => setGradeFilter(sub)} style={filterBtnStyle(gradeFilter === sub, COLORS[sub])}>{sub}</button>)}</div>
+                    {currentChartDataArr.length > 0 ? (
+                      <>
+                        <div style={{ height: "320px", marginBottom: "20px" }}><ResponsiveContainer width="100%" height="100%"><LineChart data={currentChartDataArr}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.border} /><XAxis dataKey="date" stroke={theme.border} tick={{fill: theme.textMuted, fontSize: 12}} /><YAxis domain={[0, 100]} stroke={theme.border} tick={{fill: theme.textMuted, fontSize: 12}} /><Tooltip contentStyle={{backgroundColor: theme.activeControl, borderColor: theme.border, color: theme.textMain, borderRadius: "12px"}} /><Legend /><Line type="monotone" dataKey="score" name={gradeFilter} stroke={COLORS[gradeFilter] || theme.primary} strokeWidth={4} dot={{ r: 6, fill: theme.activeControl, strokeWidth: 3 }} /></LineChart></ResponsiveContainer></div>
+                        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr", gap: "15px" }}>
+                            {chartData.filter((g: any) => g.subject === gradeFilter).map((g: any) => (
+                                <div key={g.id} style={{ background: theme.inputBg, padding: "20px", borderRadius: "16px", border: `1px solid ${theme.border}`, borderTop: `4px solid ${COLORS[g.subject] || theme.primary}`, textAlign: "center", boxShadow: theme.shadow }}>
+                                    <div style={{ fontSize: "12px", color: theme.textMuted, marginBottom: "8px" }}>{g.exam_date}</div>
+                                    <div style={{ fontSize: "15px", fontWeight: "bold", color: theme.textMain }}>{g.subject}</div>
+                                    <div style={{ fontSize: "32px", fontWeight: "900", margin: "10px 0", color: g.score >= 60 ? (COLORS[g.subject] || theme.primary) : theme.danger }}>{g.score}</div>
+                                    <div style={{ fontSize: "12px", color: theme.textMuted }}>{g.unit}</div>
+                                </div>
+                            ))}
+                        </div>
+                      </>
+                    ) : <div style={{ height: "180px", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textMuted, border: `1px dashed ${theme.border}`, borderRadius: "20px" }}>尚無足夠的考試紀錄</div>}
                   </div>
                 )}
 
