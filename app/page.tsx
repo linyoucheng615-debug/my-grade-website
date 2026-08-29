@@ -5,7 +5,7 @@ import { User, Lock, BookOpen, MessageSquare, DollarSign, TrendingUp, Home, Cale
 import { createClient } from '@supabase/supabase-js';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-const supabaseUrl = "https://kdtmalqiezudatuwqtar.supabase.co";
+const supabaseUrl = "https://kdtmalqiezudatuwqtar.supabase.co/rest/v1/";
 const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtkdG1hbHFpZXp1ZGF0dXdxdGFyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5Njg4MzgsImV4cCI6MjEwMzU0NDgzOH0.7S9BDwtq5U0AWvs2xJJ2X17VtwsKCbl5aqpPYx9dUkY";
 const supabase = createClient(supabaseUrl, supabaseKey);
 
