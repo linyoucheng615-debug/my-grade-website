@@ -5,8 +5,8 @@ import { LogOut, Pencil, Trash2, User, Lock, BookOpen, MessageSquare, TrendingUp
 import { createClient } from '@supabase/supabase-js';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-const supabaseUrl = "https://ynkvxixhiwwnocqybprs.supabase.co";
-const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlua3Z4aXhoaXd3bm9jcXlicHJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY1MDM5MzYsImV4cCI6MjA4MjA3OTkzNn0.9Z_SKdFXQOrZXEHT4J4wkSXBpt097tOuuXI6IFJN_FA";
+const supabaseUrl = "https://kdtmalqiezudatuwqtar.supabase.co";
+const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtkdG1hbHFpZXp1ZGF0dXdxdGFyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5Njg4MzgsImV4cCI6MjEwMzU0NDgzOH0.7S9BDwtq5U0AWvs2xJJ2X17VtwsKCbl5aqpPYx9dUkY";
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const SUBJECTS = ["國文", "英文", "數學", "理化", "生物", "地科", "歷史", "地理", "公民"];
