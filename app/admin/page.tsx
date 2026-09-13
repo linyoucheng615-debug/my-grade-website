@@ -109,6 +109,18 @@ export default function AdminPage() {
   const [rewardPoints, setRewardPoints] = useState("");
   const [rewardDesc, setRewardDesc] = useState("");
   const [confirmRewardId, setConfirmRewardId] = useState<number | null>(null);
+  // === 進度表狀態 ===
+  const [plannerStudent, setPlannerStudent] = useState<string>("");
+  const [plannerSubject, setPlannerSubject] = useState<string>("數學");
+  const [plannerRows, setPlannerRows] = useState<any[]>([]);
+  const [plannerTargetExam, setPlannerTargetExam] = useState<string>("");
+  const [plannerLoading, setPlannerLoading] = useState<boolean>(false);
+  // === 日曆事件點擊與調課彈窗狀態 ===
+  const [activeEventModal, setActiveEventModal] = useState<{ ev: any; clickedDate: string } | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState<string>("");
+  // ★ 新增：調課時間狀態
+  const [rescheduleStartTime, setRescheduleStartTime] = useState<string>("");
+  const [rescheduleEndTime, setRescheduleEndTime] = useState<string>("");
 
   useEffect(() => {
     const saved = localStorage.getItem("teacherName");
@@ -126,8 +138,13 @@ export default function AdminPage() {
   useEffect(() => {
     if (currentTeacher && selectedName) {
       fetchRates();
+      // 切換學生時自動同步進度表
+      if (selectedFeature === 'planner') {
+        setPlannerStudent(selectedName);
+        loadCoursePlanSchedule(selectedName, plannerSubject);
+      }
     }
-    if (currentTeacher && selectedName && selectedFeature && selectedFeature !== 'dashboard' && selectedFeature !== 'reward') {
+    if (currentTeacher && selectedName && selectedFeature && selectedFeature !== 'dashboard' && selectedFeature !== 'reward' && selectedFeature !== 'planner') {
       resetForm();
       setHistoryFilter("全部");
       setSearchKeyword(""); 
@@ -147,6 +164,20 @@ export default function AdminPage() {
                 .select("*").eq("student_name", selectedName).eq("subject", subject)
                 .order("class_date", { ascending: false }).limit(1);
             setLastRecord(data && data.length > 0 ? data[0] : null);
+
+            // ★ 自動預先帶入今天排定的進度
+            const todayStr = new Date().toLocaleDateString('en-CA');
+            const { data: todayPlan } = await supabase
+              .from("course_plans")
+              .select("planned_content")
+              .eq("student_name", selectedName)
+              .eq("subject", subject)
+              .eq("planned_date", todayStr)
+              .maybeSingle();
+
+            if (todayPlan && todayPlan.planned_content) {
+              setProgress(todayPlan.planned_content);
+            }
         };
         fetchLast();
     }
@@ -280,6 +311,121 @@ export default function AdminPage() {
       if (!selectedName) setSelectedName(data[0].name);
     }
   };
+// 讀取行事曆課程並生成進度對照表（支援常態排課展開與自訂事件）
+  // 讀取行事曆課程並生成進度對照表（支援常態排課展開、多科目防混淆與自動預排）
+  const loadCoursePlanSchedule = async (studentName: string, subjectName: string) => {
+    if (!studentName) return;
+    setPlannerLoading(true);
+
+    // 1. 抓取該學生與全體的行事曆事件
+    const { data: events, error } = await supabase
+      .from("calendar_events")
+      .select("*")
+      .or(`student_name.eq.${studentName},student_name.eq.全體`)
+      .order("event_date", { ascending: true });
+
+    if (error || !events) {
+      setPlannerLoading(false);
+      return;
+    }
+
+    // 2. 僅尋找「未來」的最近段考目標（避免鎖定過去舊段考）
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    const nextExam = events.find((e: any) => 
+      (e.type === 'exam' || e.title?.includes("段考") || e.title?.includes("模考")) &&
+      e.event_date >= todayStr
+    );
+
+    const targetExamDate = nextExam ? nextExam.event_date : null;
+    setPlannerTargetExam(nextExam ? `${nextExam.event_date} ${nextExam.title}` : "尚未設定段考目標（預設推算90天）");
+
+    const classDates: { date: string; eventId: number }[] = [];
+    const maxScanDays = 90;
+    
+    // 比對時間標準化至本地 00:00:00 與 23:59:59
+    let curr = new Date();
+    curr.setHours(0, 0, 0, 0);
+
+    const scanLimitDate = targetExamDate ? new Date(`${targetExamDate}T23:59:59`) : new Date(Date.now() + maxScanDays * 86400000);
+    scanLimitDate.setHours(23, 59, 59, 999);
+    
+    while (curr <= scanLimitDate) {
+      const dStr = curr.toLocaleDateString('en-CA');
+      const dayOfWeek = curr.getDay();
+
+      for (const ev of events) {
+        if (ev.type !== 'class' && ev.type !== undefined) continue;
+        if (ev.student_name !== studentName && ev.student_name !== '全體') continue;
+        if (ev.cancelled_dates && Array.isArray(ev.cancelled_dates) && ev.cancelled_dates.includes(dStr)) continue;
+
+        // ★ 防跨科混淆：若標題明確標註為「其他學科」，則不排入本科進度表
+        const isOtherSubject = SUBJECTS.some(sub => sub !== subjectName && ev.title?.includes(sub));
+        if (isOtherSubject) continue;
+
+        if (!ev.is_recurring) {
+          if (ev.event_date === dStr || (ev.end_date && dStr >= ev.event_date && dStr <= ev.end_date)) {
+            classDates.push({ date: dStr, eventId: ev.id });
+          }
+        } else if (ev.is_recurring && ev.recurring_pattern === 'weekly') {
+          if (dStr >= ev.event_date && (!ev.recurring_end_date || dStr <= ev.recurring_end_date)) {
+            const startDay = new Date(`${ev.event_date}T00:00:00`).getDay();
+            if (dayOfWeek === startDay) {
+              classDates.push({ date: dStr, eventId: ev.id });
+            }
+          }
+        }
+      }
+      curr.setDate(curr.getDate() + 1);
+    }
+
+    // 3. 撈取已儲存的預排進度
+    const { data: existingPlans } = await supabase
+      .from("course_plans")
+      .select("*")
+      .eq("student_name", studentName)
+      .eq("subject", subjectName);
+
+    // 4. 組合堂數清單
+    const rows = classDates.map((item, idx) => {
+      const matched = existingPlans?.find((p: any) => 
+        p.planned_date === item.date && (p.calendar_event_id === item.eventId || !p.calendar_event_id)
+      );
+      return {
+        sessionIndex: idx + 1,
+        calendarEventId: item.eventId,
+        date: item.date,
+        planId: matched?.id || null,
+        plannedContent: matched?.planned_content || "",
+        actualContent: matched?.actual_content || "",
+        status: matched?.status || "pending"
+      };
+    });
+
+    setPlannerRows(rows);
+    setPlannerLoading(false);
+  };
+
+  // 儲存整張進度表（安全處理更新與新增）
+  const handleSaveAllPlans = async () => {
+    setPlannerLoading(true);
+    for (const item of plannerRows) {
+      const rowPayload: any = {
+        student_name: plannerStudent,
+        subject: plannerSubject,
+        calendar_event_id: item.calendarEventId,
+        planned_date: item.date,
+        planned_content: item.plannedContent,
+        status: item.status
+      };
+      if (item.planId) rowPayload.id = item.planId;
+
+      await supabase.from("course_plans").upsert(rowPayload);
+    }
+    setPlannerLoading(false);
+    alert("✅ 進度規劃表已儲存！");
+    loadCoursePlanSchedule(plannerStudent, plannerSubject);
+  };
+  
 
   const fetchCalendar = async () => {
     const { data } = await supabase.from("calendar_events").select("*").order("event_date", { ascending: true });
@@ -358,6 +504,54 @@ export default function AdminPage() {
     const newCancelled = ev.cancelled_dates ? [...ev.cancelled_dates, cancelDate] : [cancelDate];
     await supabase.from("calendar_events").update({ cancelled_dates: newCancelled }).eq("id", ev.id);
     setLoading(false);
+    fetchCalendar();
+  };
+
+  // 單堂改期（調課）核心邏輯
+  const handleRescheduleEvent = async () => {
+    if (!activeEventModal || !rescheduleDate) return alert("請先選擇目標改期日期！");
+    const { ev, clickedDate } = activeEventModal;
+
+    setLoading(true);
+
+    if (ev.is_recurring) {
+      // 1. 原常態課程：將原日期加入排除清單
+      const newCancelled = ev.cancelled_dates ? [...ev.cancelled_dates, clickedDate] : [clickedDate];
+      await supabase.from("calendar_events").update({ cancelled_dates: newCancelled }).eq("id", ev.id);
+
+      // 2. 在新日期建立一筆單次補課紀錄（套用新日期與新時間）
+      await supabase.from("calendar_events").insert([{
+        event_date: rescheduleDate,
+        end_date: rescheduleDate,
+        title: `${ev.title} (調課)`,
+        type: ev.type || 'class',
+        student_name: ev.student_name,
+        is_recurring: false,
+        start_time: rescheduleStartTime || null,
+        end_time: rescheduleEndTime || null
+      }]);
+    } else {
+      // 單次事件：直接修改日期與時間
+      await supabase.from("calendar_events").update({
+        event_date: rescheduleDate,
+        end_date: rescheduleDate,
+        start_time: rescheduleStartTime || null,
+        end_time: rescheduleEndTime || null
+      }).eq("id", ev.id);
+    }
+
+    // 同步更新進度表上的日期
+    await supabase.from("course_plans")
+      .update({ planned_date: rescheduleDate })
+      .eq("student_name", ev.student_name)
+      .eq("planned_date", clickedDate);
+
+    setLoading(false);
+    alert(`🎉 已成功將課程調整至 ${rescheduleDate} (${rescheduleStartTime} ~ ${rescheduleEndTime})！`);
+    setActiveEventModal(null);
+    setRescheduleDate("");
+    setRescheduleStartTime("");
+    setRescheduleEndTime("");
     fetchCalendar();
   };
 
@@ -472,8 +666,28 @@ export default function AdminPage() {
       fetchHistoryData(); 
       fetchStudentDetails();
       if (selectedFeature === 'class') {
-         const { data } = await supabase.from("class_logs").select("*").eq("student_name", selectedName).eq("subject", subject).order("class_date", { ascending: false }).limit(1);
-         setLastRecord(data && data.length > 0 ? data[0] : null);
+          const { data } = await supabase.from("class_logs").select("*").eq("student_name", selectedName).eq("subject", subject).order("class_date", { ascending: false }).limit(1);
+          setLastRecord(data && data.length > 0 ? data[0] : null);
+
+          // 自動連動更新 course_plans 進度表（安全處理 null 並同時比對科目）
+          const { data: matchedPlan } = await supabase
+            .from("course_plans")
+            .select("*")
+            .eq("student_name", selectedName)
+            .eq("subject", subject)
+            .eq("planned_date", classDate)
+            .maybeSingle();
+
+          if (matchedPlan) {
+            const planContent = (matchedPlan.planned_content || "").trim();
+            const currentProgress = (progress || "").trim();
+            const isMatch = planContent.length > 0 && planContent === currentProgress;
+
+            await supabase.from("course_plans").update({
+              actual_content: currentProgress,
+              status: isMatch ? "on_track" : "modified"
+            }).eq("id", matchedPlan.id);
+          }
       }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -625,6 +839,15 @@ export default function AdminPage() {
                     <div onClick={() => setSelectedFeature('report')} style={{ ...solidCardStyle, cursor: "pointer", borderLeft: `6px solid #6366f1`, display: "flex", alignItems: "center", gap: "15px", marginBottom: 0 }}>
                         <div style={{ background: "#6366f120", padding: "12px", borderRadius: "12px" }}><FileText size={24} color="#6366f1" /></div>
                         <div><div style={{ fontWeight: "900", fontSize: "16px", color: theme.textMain }}>📊 檢視學習報表</div><div style={{ fontSize: "12px", color: theme.textMuted, marginTop: "4px" }}>歷次成績走勢與平均</div></div>
+                    </div>
+                    <div onClick={() => {
+                        setSelectedFeature('planner');
+                        const targetStu = selectedName || (studentList.length > 0 ? studentList[0].name : "");
+                        setPlannerStudent(targetStu);
+                        loadCoursePlanSchedule(targetStu, plannerSubject);
+                    }} style={{ ...solidCardStyle, cursor: "pointer", borderLeft: `6px solid #0ea5e9`, display: "flex", alignItems: "center", gap: "15px", marginBottom: 0 }}>
+                        <div style={{ background: `#0ea5e920`, padding: "12px", borderRadius: "12px" }}><CalendarIcon size={24} color="#0ea5e9" /></div>
+                        <div><div style={{ fontWeight: "900", fontSize: "16px", color: theme.textMain }}>📅 段考進度規劃</div><div style={{ fontSize: "12px", color: theme.textMuted, marginTop: "4px" }}>連動行事曆堂數與進度檢核</div></div>
                     </div>
                 </div>
               </div>
@@ -960,7 +1183,34 @@ export default function AdminPage() {
                                                   const itemColor = getEventColor(ev);
                                                   const timeLabel = ev.start_time ? `${ev.start_time} ` : "";
                                                   return (
-                                                      <div key={eIdx} style={{ fontSize: "9px", padding: "2px 4px", borderRadius: "4px", background: itemColor, color: (ev.isCancelled || ev.type === 'cancellation') ? theme.textMuted : "#ffffff", textDecoration: (ev.isCancelled || ev.type === 'cancellation') ? "line-through" : "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                                      <div 
+                                                          key={eIdx} 
+                                                          onClick={(e) => {
+                                                              e.stopPropagation();
+                                                              setActiveEventModal({ ev, clickedDate: dateKey });
+                                                              setRescheduleDate(dateKey);
+                                                              // ★ 帶入該堂課原本的時間
+                                                              setRescheduleStartTime(ev.start_time || "18:30");
+                                                              setRescheduleEndTime(ev.end_time || "20:30");
+                                                          }}
+                                                          style={{ 
+                                                              fontSize: "9px", 
+                                                              padding: "3px 5px", 
+                                                              borderRadius: "5px", 
+                                                              background: itemColor, 
+                                                              color: (ev.isCancelled || ev.type === 'cancellation') ? theme.textMuted : "#ffffff", 
+                                                              textDecoration: (ev.isCancelled || ev.type === 'cancellation') ? "line-through" : "none", 
+                                                              whiteSpace: "nowrap", 
+                                                              overflow: "hidden", 
+                                                              textOverflow: "ellipsis",
+                                                              cursor: "pointer",
+                                                              boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+                                                              transition: "transform 0.1s"
+                                                          }}
+                                                          onMouseOver={(e) => e.currentTarget.style.transform = "scale(1.03)"}
+                                                          onMouseOut={(e) => e.currentTarget.style.transform = "scale(1)"}
+                                                          title="點擊進行調課或停課"
+                                                      >
                                                           {ev.student_name === "全體" ? "" : `[${ev.student_name}]`}{timeLabel}{ev.type === 'cancellation' ? "❌停課" : ev.title}
                                                       </div>
                                                   );
@@ -1032,7 +1282,123 @@ export default function AdminPage() {
                       ))}
                     </div>
                   </div>
+                  
                 )}
+                {/* ★ 課堂點擊異動彈窗 (Modal) ★ */}
+                    {activeEventModal && (
+                      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
+                        <div style={{ ...solidCardStyle, maxWidth: "420px", width: "100%", margin: 0, position: "relative", boxShadow: "0 20px 50px rgba(0,0,0,0.3)" }}>
+                          <button 
+                            onClick={() => setActiveEventModal(null)} 
+                            style={{ position: "absolute", right: 15, top: 15, background: "none", border: "none", color: theme.textMuted, cursor: "pointer" }}
+                          >
+                            <X size={20} />
+                          </button>
+
+                          <h3 style={{ margin: "0 0 15px 0", color: theme.textMain, fontWeight: "900", display: "flex", alignItems: "center", gap: "8px" }}>
+                            📌 課堂異動管理
+                          </h3>
+                          
+                          <div style={{ background: theme.inputBg, padding: "14px", borderRadius: "14px", marginBottom: "18px", border: `1px solid ${theme.border}` }}>
+                            <div style={{ fontWeight: "bold", fontSize: "16px", color: theme.primary }}>{activeEventModal.ev.title}</div>
+                            <div style={{ color: theme.textMuted, fontSize: "13px", marginTop: "6px" }}>
+                              📅 原定日期：<b>{activeEventModal.clickedDate}</b> {activeEventModal.ev.start_time ? `(${activeEventModal.ev.start_time} ~ ${activeEventModal.ev.end_time || ""})` : ""}
+                            </div>
+                            <div style={{ color: theme.textMuted, fontSize: "13px", marginTop: "2px" }}>
+                              👤 學生對象：<b>{activeEventModal.ev.student_name}</b> {activeEventModal.ev.is_recurring ? "🔄 (每週常態課)" : "📌 (單次課)"}
+                            </div>
+                            {activeEventModal.ev.isCancelled && (
+                              <div style={{ color: theme.danger, fontSize: "12px", fontWeight: "bold", marginTop: "6px" }}>⚠️ 此堂課目前處於停課狀態</div>
+                            )}
+                          </div>
+
+                          {/* 快捷操作 1：單堂改期調課（日期與時段） */}
+                                <div style={{ marginBottom: "20px" }}>
+                                  <label style={{ fontSize: "13px", fontWeight: "bold", color: theme.textMain, display: "block", marginBottom: "8px" }}>
+                                    🔄 改移至其他日期與時段（單堂調課）：
+                                  </label>
+                                  
+                                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                                    <div>
+                                      <label style={{ fontSize: "11px", color: theme.textMuted, display: "block", marginBottom: "4px" }}>調課目標日期</label>
+                                      <input 
+                                        type="date" 
+                                        value={rescheduleDate} 
+                                        onChange={(e) => setRescheduleDate(e.target.value)} 
+                                        style={{ ...inputStyle, margin: 0 }} 
+                                      />
+                                    </div>
+
+                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                                      <div>
+                                        <label style={{ fontSize: "11px", color: theme.textMuted, display: "block", marginBottom: "4px" }}>⏰ 開始時間</label>
+                                        <input 
+                                          type="time" 
+                                          value={rescheduleStartTime} 
+                                          onChange={(e) => setRescheduleStartTime(e.target.value)} 
+                                          style={{ ...inputStyle, margin: 0 }} 
+                                        />
+                                      </div>
+                                      <div>
+                                        <label style={{ fontSize: "11px", color: theme.textMuted, display: "block", marginBottom: "4px" }}>⏰ 結束時間</label>
+                                        <input 
+                                          type="time" 
+                                          value={rescheduleEndTime} 
+                                          onChange={(e) => setRescheduleEndTime(e.target.value)} 
+                                          style={{ ...inputStyle, margin: 0 }} 
+                                        />
+                                      </div>
+                                    </div>
+
+                                    <button 
+                                      onClick={handleRescheduleEvent} 
+                                      disabled={loading}
+                                      style={{ ...btnStyle(theme.primary), marginTop: "5px", padding: "10px" }}
+                                    >
+                                      確認變更日期與時段
+                                    </button>
+                                  </div>
+                                </div>
+
+                          {/* 快捷操作 2：請假/停課/恢復 與 完整編輯 */}
+                          <div style={{ borderTop: `1px dashed ${theme.border}`, paddingTop: "15px", display: "flex", gap: "10px" }}>
+                            {activeEventModal.ev.is_recurring && (
+                              activeEventModal.ev.isCancelled ? (
+                                <button 
+                                  onClick={() => {
+                                    handleRestoreSingleEvent(activeEventModal.ev, activeEventModal.clickedDate);
+                                    setActiveEventModal(null);
+                                  }} 
+                                  style={{ ...btnStyle(theme.success), marginTop: 0, flex: 1, fontSize: "12px" }}
+                                >
+                                  恢復該堂上課
+                                </button>
+                              ) : (
+                                <button 
+                                  onClick={() => {
+                                    handleCancelSingleEvent(activeEventModal.ev, activeEventModal.clickedDate);
+                                    setActiveEventModal(null);
+                                  }} 
+                                  style={{ ...btnStyle(theme.danger), marginTop: 0, flex: 1, fontSize: "12px" }}
+                                >
+                                  該堂請假 / 停課
+                                </button>
+                              )
+                            )}
+
+                            <button 
+                              onClick={() => {
+                                handleEditEventClick(activeEventModal.ev);
+                                setActiveEventModal(null);
+                              }} 
+                              style={{ ...btnStyle(theme.inputBg), color: theme.textMain, border: `1px solid ${theme.border}`, marginTop: 0, flex: 1, fontSize: "12px" }}
+                            >
+                              編輯常態設定
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                 {selectedFeature === 'tuition' && (
                   <>
@@ -1097,7 +1463,88 @@ export default function AdminPage() {
                     ) : <div style={{ height: "180px", display: "flex", alignItems: "center", justifyContent: "center", color: theme.textMuted, border: `1px dashed ${theme.border}`, borderRadius: "20px" }}>尚無足夠的考試紀錄</div>}
                   </div>
                 )}
+{selectedFeature === 'planner' && (
+                  <div style={solidCardStyle}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "15px", marginBottom: "20px" }}>
+                      <div>
+                        <h3 style={{ color: theme.textMain, margin: "0 0 6px 0", fontWeight: "900" }}>📅 {plannerStudent} - 段考進度規劃</h3>
+                        <span style={{ fontSize: "13px", color: theme.primary, background: `${theme.primary}15`, padding: "4px 10px", borderRadius: "8px", fontWeight: "bold" }}>
+                          🎯 目標：{plannerTargetExam} (共 {plannerRows.length} 堂課)
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                        <select 
+                          value={plannerSubject} 
+                          onChange={(e) => {
+                            setPlannerSubject(e.target.value);
+                            loadCoursePlanSchedule(plannerStudent, e.target.value);
+                          }} 
+                          style={{ ...selectStyle, width: "auto", margin: 0, padding: "8px 12px" }}
+                        >
+                          {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                        <button 
+                          onClick={handleSaveAllPlans} 
+                          disabled={plannerLoading} 
+                          style={{ ...btnStyle(theme.primary), width: "auto", margin: 0, padding: "8px 18px", whiteSpace: "nowrap" }}
+                        >
+                          {plannerLoading ? "儲存中..." : "💾 儲存進度表"}
+                        </button>
+                      </div>
+                    </div>
 
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "14px" }}>
+                        <thead>
+                          <tr style={{ borderBottom: `2px solid ${theme.border}`, color: theme.textMuted }}>
+                            <th style={{ padding: "10px", width: "70px" }}>堂數</th>
+                            <th style={{ padding: "10px", width: "110px" }}>上課日期</th>
+                            <th style={{ padding: "10px" }}>預計進度 (老師安排)</th>
+                            <th style={{ padding: "10px" }}>實際進度 (自動比對)</th>
+                            <th style={{ padding: "10px", width: "90px" }}>狀態</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {plannerRows.length === 0 ? (
+                            <tr>
+                              <td colSpan={5} style={{ textAlign: "center", padding: "30px", color: theme.textMuted }}>
+                                目前至下次段考前沒有排定任何課堂，請先至「行事曆」排定課表或段考日期 ✨
+                              </td>
+                            </tr>
+                          ) : (
+                            plannerRows.map((row, idx) => (
+                              <tr key={idx} style={{ borderBottom: `1px solid ${theme.border}` }}>
+                                <td style={{ padding: "12px 10px", fontWeight: "bold", color: theme.textMain }}>第 {row.sessionIndex} 堂</td>
+                                <td style={{ padding: "12px 10px", color: theme.textMuted }}>{row.date}</td>
+                                <td style={{ padding: "12px 10px" }}>
+                                  <input
+                                    type="text"
+                                    value={row.plannedContent}
+                                    onChange={(e) => {
+                                      const updated = [...plannerRows];
+                                      updated[idx].plannedContent = e.target.value;
+                                      setPlannerRows(updated);
+                                    }}
+                                    placeholder="例：1-1 數列與極限"
+                                    style={{ ...inputStyle, margin: 0, padding: "8px 12px" }}
+                                  />
+                                </td>
+                                <td style={{ padding: "12px 10px", color: theme.textMuted, fontStyle: row.actualContent ? "normal" : "italic" }}>
+                                  {row.actualContent || "(尚未登記日誌)"}
+                                </td>
+                                <td style={{ padding: "12px 10px" }}>
+                                  {row.status === "on_track" && <span style={{ color: theme.success, fontWeight: "bold" }}>🟢 吻合</span>}
+                                  {row.status === "modified" && <span style={{ color: "#f59e0b", fontWeight: "bold" }}>🟡 微調</span>}
+                                  {row.status === "pending" && <span style={{ color: theme.textMuted }}>待上課</span>}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
