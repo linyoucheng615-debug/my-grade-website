@@ -1,33 +1,34 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { User, Lock, BookOpen, MessageSquare, DollarSign, TrendingUp, Home, Calendar, Award, LogOut, Coins, FileText, ChevronDown, ChevronUp, Sun, Moon, Filter, Bell, Clock, AlertTriangle, ChevronLeft, ChevronRight, X, ShoppingBag } from "lucide-react";
-import { createClient } from '@supabase/supabase-js';
+import { User, Lock, BookOpen, MessageSquare, DollarSign, TrendingUp, Home, Calendar, Award, LogOut, Coins, FileText, ChevronDown, ChevronUp, Sun, Moon, Filter, ChevronLeft, ChevronRight, X, ShoppingBag, Target } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-
-const supabaseUrl = "https://kdtmalqiezudatuwqtar.supabase.co";
-const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtkdG1hbHFpZXp1ZGF0dXdxdGFyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5Njg4MzgsImV4cCI6MjEwMzU0NDgzOH0.7S9BDwtq5U0AWvs2xJJ2X17VtwsKCbl5aqpPYx9dUkY";
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-const SUBJECTS = ["國文", "英文", "數學", "理化", "生物", "地科", "歷史", "地理", "公民"];
-const COLORS: Record<string, string> = {
-  "國文": "#ef4444", "英文": "#f59e0b", "數學": "#10b981",
-  "理化": "#3b82f6", "生物": "#8b5cf6", "地科": "#ec4899",
-  "歷史": "#6366f1", "地理": "#14b8a6", "公民": "#f97316"
-};
-
-const WEEK_DAYS = ["日", "一", "二", "三", "四", "五", "六"];
+import { supabase } from "@/lib/supabaseClient";
+import { SUBJECTS, SUBJECT_COLORS as COLORS, WEEK_DAYS } from "@/lib/constants";
+import { getTodayDateString, getCurrentMonthString, formatDate } from "@/lib/dateUtils";
+import { useToast } from "@/components/ui/Toast";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import type { CalendarEvent, ClassLog, Grade, PointLog, Reward, Student, StudentInventory, CoursePlan } from "@/types/database";
 
 export default function StudentPortal() {
+  const { showToast } = useToast();
   const [loginName, setLoginName] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
-  const [studentData, setStudentData] = useState<any>(null);
+  const [studentData, setStudentData] = useState<{
+    info: Student;
+    classLogs: ClassLog[];
+    grades: Grade[];
+    points: PointLog[];
+    totalPoints: number;
+    availableSubjects: string[];
+    logSubjects: string[];
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   
   const [tuitionTotal, setTuitionTotal] = useState(0);
   const [tuitionDetails, setTuitionDetails] = useState<any[]>([]);
-  const [currentMonth, setCurrentMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [currentMonth, setCurrentMonth] = useState(getCurrentMonthString());
   
   const [activeView, setActiveView] = useState("home");
   const [gradeFilter, setGradeFilter] = useState("");
@@ -35,15 +36,31 @@ export default function StudentPortal() {
   const [logFilter, setLogFilter] = useState("全部");
   const [expandedLogId, setExpandedLogId] = useState<number | null>(null);
 
-  const [calendarEvents, setCalendarEvents] = useState<any[]>([]);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [coursePlans, setCoursePlans] = useState<CoursePlan[]>([]);
+  const [plannerSubject, setPlannerSubject] = useState<string>("數學");
   const [selectedDayDetail, setSelectedDayDetail] = useState<{date: string, logs: any[], events: any[]} | null>(null);
 
   const [viewDate, setViewDate] = useState(new Date());
-  const [calendarView, setCalendarView] = useState<"month" | "week">("month");
+  const [calendarView, setCalendarView] = useState<"month" | "week" | "agenda">("month");
 
-  const [rewards, setRewards] = useState<any[]>([]);
-  // ★ 新增：學生背包狀態
-  const [inventory, setInventory] = useState<any[]>([]);
+  const [rewards, setRewards] = useState<Reward[]>([]);
+  const [inventory, setInventory] = useState<StudentInventory[]>([]);
+
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText?: string;
+    cancelText?: string;
+    isDanger?: boolean;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  });
 
   useEffect(() => {
     const savedLogin = localStorage.getItem("studentLogin");
@@ -114,7 +131,7 @@ export default function StudentPortal() {
     if (!student) {
       setLoading(false);
       localStorage.removeItem("studentLogin");
-      return alert("登入失敗");
+      return showToast("登入失敗，請確認學生姓名與密碼！", "error");
     }
 
     localStorage.setItem("studentLogin", JSON.stringify({ name, password }));
@@ -133,6 +150,17 @@ export default function StudentPortal() {
 
     const { data: manualEvents } = await supabase.from("calendar_events").select("*").in('student_name', [student.name, '全體']);
     setCalendarEvents(manualEvents || []);
+
+    // ★ 撈取該學生的段考進度表 (course_plans)
+    const { data: plans } = await supabase.from("course_plans")
+      .select("*")
+      .eq("student_name", student.name)
+      .order("planned_date", { ascending: true });
+    setCoursePlans(plans || []);
+    const availablePlanSubjects = Array.from(new Set((plans || []).map((p: any) => p.subject))) as string[];
+    if (availablePlanSubjects.length > 0 && !availablePlanSubjects.includes(plannerSubject)) {
+      setPlannerSubject(availablePlanSubjects[0]);
+    }
 
     let totalFee = 0;
     let tDetails: any[] = [];
@@ -170,66 +198,82 @@ export default function StudentPortal() {
     setLoading(false);
   };
 
-  // ★ 改寫：兌換商品時，同步發送到學生背包
-  const handleRedeem = async (reward: any) => {
+  // ★ 兌換商品時，使用 ConfirmModal 與 Toast
+  const handleRedeem = (reward: any) => {
+    if (!studentData) return;
     if (studentData.totalPoints < reward.points_required) {
-      return alert("您的點數還不夠喔！再多努力學習累積點數吧 💪");
+      return showToast("您的點數還不夠喔！再多努力學習累積點數吧 💪", "error");
     }
 
-    const confirmRedeem = window.confirm(`確定要花費 ${reward.points_required} 點兌換「${reward.title}」嗎？\n(兌換後商品將會放入您的「🎒 我的背包」)`);
-    if (!confirmRedeem) return;
+    setConfirmModal({
+      isOpen: true,
+      title: "🎁 兌換獎勵商品",
+      message: `確定要花費 ${reward.points_required} 點兌換「${reward.title}」嗎？\n兌換後商品將會存入您的「🎒 我的背包」。`,
+      confirmText: "立即兌換",
+      cancelText: "再考慮一下",
+      isDanger: false,
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        setLoading(true);
+        const { error: pointError } = await supabase.from("point_logs").insert([{
+          student_name: studentData.info.name,
+          points: -reward.points_required,
+          reason: `🎁 兌換商品：${reward.title}`
+        }]);
 
-    setLoading(true);
-    
-    // 1. 扣除點數
-    const { error: pointError } = await supabase.from("point_logs").insert([{
-      student_name: studentData.info.name,
-      points: -reward.points_required,
-      reason: `🎁 兌換商品：${reward.title}`
-    }]);
+        const { error: invError } = await supabase.from("student_inventory").insert([{
+          student_name: studentData.info.name,
+          reward_title: reward.title,
+          status: 'unused'
+        }]);
 
-    // 2. 將商品放入背包 (student_inventory)
-    const { error: invError } = await supabase.from("student_inventory").insert([{
-      student_name: studentData.info.name,
-      reward_title: reward.title,
-      status: 'unused'
-    }]);
+        setLoading(false);
 
-    setLoading(false);
-
-    if (pointError || invError) {
-      alert("兌換發生錯誤，請聯絡老師處理！");
-    } else {
-      alert("🎉 兌換成功！商品已經放入「🎒 我的背包」囉！您可以隨時點擊使用！");
-      fetchStudentData(studentData.info.name, studentData.info.password);
-    }
+        if (pointError || invError) {
+          showToast("兌換發生錯誤，請聯絡老師處理！", "error");
+        } else {
+          showToast("🎉 兌換成功！商品已經放入「🎒 我的背包」囉！", "success");
+          fetchStudentData(studentData.info.name, studentData.info.password || "");
+        }
+      }
+    });
   };
 
-  // ★ 新增：學生點擊「立即使用」背包裡的商品
-  const handleUseItem = async (item: any) => {
-      const confirmUse = window.confirm(`確定要現在使用「${item.reward_title}」嗎？\n(⚠️ 使用後老師會立刻收到通知，且無法復原喔！)`);
-      if(!confirmUse) return;
+  // ★ 學生點擊「立即使用」背包裡的商品
+  const handleUseItem = (item: any) => {
+      if (!studentData) return;
+      setConfirmModal({
+        isOpen: true,
+        title: "🎒 使用商品券",
+        message: `確定要現在使用「${item.reward_title}」嗎？\n(⚠️ 使用後老師會立刻收到通知，且無法復原喔！)`,
+        confirmText: "確定使用",
+        cancelText: "取消",
+        isDanger: true,
+        onConfirm: async () => {
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          setLoading(true);
+          const { error } = await supabase.from("student_inventory").update({
+              status: 'used',
+              used_at: new Date().toISOString()
+          }).eq("id", item.id);
+          
+          setLoading(false);
 
-      setLoading(true);
-      // 將商品狀態更新為 'used'，並壓上使用時間
-      const { error } = await supabase.from("student_inventory").update({
-          status: 'used',
-          used_at: new Date().toISOString()
-      }).eq("id", item.id);
-      
-      setLoading(false);
-
-      if(error) {
-          alert("使用失敗: " + error.message);
-      } else {
-          alert("✅ 成功使用！老師已經收到通知囉！");
-          fetchStudentData(studentData.info.name, studentData.info.password);
-      }
+          if (error) {
+              showToast("使用失敗: " + error.message, "error");
+          } else {
+              showToast("✅ 成功使用！老師已經收到通知囉！", "success");
+              fetchStudentData(studentData.info.name, studentData.info.password || "");
+          }
+        }
+      });
   };
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!loginName.trim() || !loginPassword.trim()) return alert("請輸入姓名和密碼");
+    if (!loginName.trim() || !loginPassword.trim()) {
+      return showToast("請輸入姓名和密碼", "error");
+    }
     fetchStudentData(loginName, loginPassword);
   };
 
@@ -356,6 +400,19 @@ export default function StudentPortal() {
   const currentChartData = [...getFilteredGrades()].reverse().map((g: any) => ({ date: g.exam_date, score: g.score }));
   const currentAvg = Math.round(getFilteredGrades().reduce((acc:any, curr:any) => acc + curr.score, 0) / (getFilteredGrades().length || 1));
 
+  const todayStr = getTodayDateString();
+  const upcomingExam = calendarEvents.find((e: any) => 
+    (e.type === 'exam' || e.title?.includes("段考") || e.title?.includes("模考")) &&
+    e.event_date >= todayStr
+  );
+  const examCountdownDays = upcomingExam
+    ? Math.ceil((new Date(`${upcomingExam.event_date}T00:00:00`).getTime() - new Date(`${todayStr}T00:00:00`).getTime()) / 86400000)
+    : null;
+
+  const availablePlannerSubjects = Array.from(new Set(coursePlans.map((p: any) => p.subject))) as string[];
+  const currentPlannerSubject = plannerSubject || (availablePlannerSubjects.length > 0 ? availablePlannerSubjects[0] : "數學");
+  const filteredPlans = coursePlans.filter((p: any) => p.subject === currentPlannerSubject);
+
   return (
     <div style={{ ...globalContainerStyle, paddingBottom: "100px" }}>
       <style jsx global>{` body { background-color: ${theme.bodyBg}; margin: 0; transition: background-color 0.5s ease; } `}</style>
@@ -376,7 +433,7 @@ export default function StudentPortal() {
         {activeView === "home" && (
           <div style={{ animation: "fadeIn 0.4s ease" }}>
               <h3 style={{ fontSize: "18px", margin: "0 0 15px 0", fontWeight: "bold", color: theme.textMain }}>📌 快速功能導覽</h3>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px", marginBottom: "30px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px", marginBottom: "25px" }}>
                   <div onClick={() => setActiveView("class")} style={{ ...cardStyle, cursor: "pointer", borderLeftWidth: "5px", borderLeftColor: COLORS["英文"] }}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}><div style={{ fontWeight: "bold", fontSize: "16px", color: theme.textMain }}>上課紀錄</div><BookOpen size={20} color={COLORS["英文"]} /></div>
                       <div style={{ fontSize: "12px", color: theme.textMuted }}>追蹤作業與進度</div>
@@ -395,6 +452,79 @@ export default function StudentPortal() {
                   </div>
               </div>
 
+              {/* 🎯 新增：段考進度規劃 (Course Planner) 學生端檢視 */}
+              <div style={{ ...cardStyle, padding: "20px", marginBottom: "25px", borderLeftWidth: "6px", borderLeftColor: COLORS[currentPlannerSubject] || theme.primary }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px", flexWrap: "wrap", gap: "10px" }}>
+                      <div>
+                          <h3 style={{ margin: "0 0 4px 0", fontSize: "18px", fontWeight: "900", display: "flex", alignItems: "center", gap: "8px", color: theme.textMain }}>
+                              <Target size={20} color={COLORS[currentPlannerSubject] || theme.primary} /> 🎯 段考進度規劃
+                          </h3>
+                          <div style={{ fontSize: "12px", color: theme.textMuted }}>
+                              {upcomingExam ? (
+                                  <span>目標：<b style={{ color: theme.textMain }}>{upcomingExam.title}</b> ({upcomingExam.event_date})</span>
+                              ) : "目標：尚未排定下次段考日程"}
+                          </div>
+                      </div>
+                      {upcomingExam && (
+                          <div style={{ background: `${theme.primary}15`, color: theme.primary, padding: "6px 14px", borderRadius: "12px", fontSize: "13px", fontWeight: "900" }}>
+                              {examCountdownDays !== null && examCountdownDays >= 0 ? `🔥 倒數 ${examCountdownDays} 天` : "已結束"}
+                          </div>
+                      )}
+                  </div>
+
+                  {availablePlannerSubjects.length > 1 && (
+                      <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "10px", marginBottom: "12px", scrollbarWidth: "none" }}>
+                          {availablePlannerSubjects.map(sub => (
+                              <button key={sub} onClick={() => setPlannerSubject(sub)} style={filterBtnStyle(currentPlannerSubject === sub, COLORS[sub] || theme.primary)}>
+                                  {sub}
+                              </button>
+                          ))}
+                      </div>
+                  )}
+
+                  {filteredPlans.length > 0 ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                          {filteredPlans.map((plan, idx) => {
+                              const isPast = plan.planned_date < todayStr;
+                              const isToday = plan.planned_date === todayStr;
+                              const subColor = COLORS[plan.subject] || theme.primary;
+                              return (
+                                  <div key={plan.id || idx} style={{ background: isToday ? `${theme.primary}12` : theme.inputBg, border: isToday ? `2px solid ${theme.primary}` : `1px solid ${theme.border}`, padding: "12px 14px", borderRadius: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
+                                      <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: 0 }}>
+                                          <div style={{ textAlign: "center", background: `${subColor}15`, color: subColor, padding: "4px 8px", borderRadius: "8px", fontSize: "11px", fontWeight: "bold", whiteSpace: "nowrap" }}>
+                                              第 {idx + 1} 堂
+                                          </div>
+                                          <div style={{ minWidth: 0, flex: 1 }}>
+                                              <div style={{ fontSize: "14px", fontWeight: "bold", color: theme.textMain, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                                  {plan.planned_content || "（老師尚未排定章節）"}
+                                              </div>
+                                              <div style={{ fontSize: "11px", color: theme.textMuted, marginTop: "2px" }}>
+                                                  📅 {plan.planned_date} {isToday ? "• 今日" : isPast ? "• 已完成" : ""}
+                                              </div>
+                                          </div>
+                                      </div>
+                                      <div>
+                                          {plan.status === 'on_track' && (
+                                              <span style={{ fontSize: "11px", color: theme.success, fontWeight: "bold", background: `${theme.success}15`, padding: "3px 8px", borderRadius: "6px", whiteSpace: "nowrap" }}>🟢 吻合</span>
+                                          )}
+                                          {plan.status === 'modified' && (
+                                              <span style={{ fontSize: "11px", color: "#f59e0b", fontWeight: "bold", background: "rgba(245,158,11,0.15)", padding: "3px 8px", borderRadius: "6px", whiteSpace: "nowrap" }}>🟡 微調</span>
+                                          )}
+                                          {(!plan.status || plan.status === 'pending') && (
+                                              <span style={{ fontSize: "11px", color: theme.textMuted, background: theme.card, padding: "3px 8px", borderRadius: "6px", whiteSpace: "nowrap" }}>⏳ 待上課</span>
+                                          )}
+                                      </div>
+                                  </div>
+                              );
+                          })}
+                      </div>
+                  ) : (
+                      <div style={{ textAlign: "center", padding: "20px", color: theme.textMuted, background: theme.inputBg, borderRadius: "14px", border: `1px dashed ${theme.border}`, fontSize: "13px" }}>
+                          目前此科目尚未設定段考進度表，上課時可以和老師一起排定進度喔 ✨
+                      </div>
+                  )}
+              </div>
+
               <div style={{ ...cardStyle, padding: "20px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "10px" }}>
                       <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "900", display: "flex", alignItems: "center", gap: "8px", color: theme.textMain }}>
@@ -403,9 +533,10 @@ export default function StudentPortal() {
                       <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                           <span style={{ fontWeight: "bold", fontSize: "15px", color: theme.textMain }}>{calYear} 年 {calMonth + 1} 月</span>
                           
-                          <select value={calendarView} onChange={(e) => setCalendarView(e.target.value as "month"|"week")} style={{ background: theme.inputBg, border: `1px solid ${theme.border}`, color: theme.textMain, borderRadius: "8px", padding: "4px 8px", fontSize: "12px", outline: "none", cursor: "pointer", fontWeight: "bold" }}>
+                          <select value={calendarView} onChange={(e) => setCalendarView(e.target.value as "month"|"week"|"agenda")} style={{ background: theme.inputBg, border: `1px solid ${theme.border}`, color: theme.textMain, borderRadius: "8px", padding: "4px 8px", fontSize: "12px", outline: "none", cursor: "pointer", fontWeight: "bold" }}>
                               <option value="month">月檢視</option>
                               <option value="week">週檢視</option>
+                              <option value="agenda">清單檢視</option>
                           </select>
 
                           <div style={{ display: "flex", gap: "5px" }}>
@@ -416,48 +547,122 @@ export default function StudentPortal() {
                       </div>
                   </div>
 
-                  <div style={isMobile ? { overflowX: "auto", paddingBottom: "10px", WebkitOverflowScrolling: "touch" } : {}}>
-                    <div style={isMobile ? { minWidth: "600px" } : {}}>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", textAlign: "center", marginBottom: "10px", fontWeight: "bold", fontSize: "12px", color: theme.textMuted }}>
-                          {WEEK_DAYS.map(d => <div key={d} style={{ padding: "5px 0" }}>{d}</div>)}
-                      </div>
+                  {calendarView === "agenda" ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                      {displayCells.filter(c => c !== null).map(cell => {
+                        const dateKey = cell.dateKey;
+                        const dayEvents = getEventsForDate(dateKey);
+                        const dayLogs = studentData.classLogs.filter((l: any) => l.class_date === dateKey);
+                        const dayPlans = coursePlans.filter(p => p.planned_date === dateKey);
+                        if (dayEvents.length === 0 && dayLogs.length === 0 && dayPlans.length === 0) return null;
+                        const isToday = getTodayDateString() === dateKey;
 
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: "6px" }}>
-                          {displayCells.map((cell, idx) => {
-                              if (cell === null) return <div key={`blank-${idx}`} style={{ minHeight: "75px", background: "transparent" }} />;
-                              
-                              const dateKey = cell.dateKey;
-                              const dayEvents = getEventsForDate(dateKey);
-                              const dayLogs = studentData.classLogs.filter((l: any) => l.class_date === dateKey);
-                              const hasLog = dayLogs.length > 0;
-                              const isToday = new Date().toISOString().slice(0, 10) === dateKey;
-                              
-                              const cellMinHeight = calendarView === "week" ? "120px" : "75px";
+                        return (
+                          <div
+                            key={dateKey}
+                            onClick={() => setSelectedDayDetail({ date: dateKey, logs: dayLogs, events: dayEvents })}
+                            style={{
+                              background: isToday ? `${theme.primary}12` : theme.inputBg,
+                              border: isToday ? `2px solid ${theme.primary}` : `1px solid ${theme.border}`,
+                              padding: "14px 16px",
+                              borderRadius: "14px",
+                              cursor: "pointer",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "8px",
+                              transition: "0.2s"
+                            }}
+                          >
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <span style={{ fontWeight: "900", fontSize: "14px", color: isToday ? theme.primary : theme.textMain }}>
+                                📅 {dateKey} {isToday ? "（今天）" : ""}
+                              </span>
+                              {dayLogs.length > 0 && (
+                                <span style={{ fontSize: "11px", color: theme.success, fontWeight: "bold", background: `${theme.success}15`, padding: "2px 8px", borderRadius: "6px" }}>
+                                  ✓ 已填寫日誌
+                                </span>
+                              )}
+                            </div>
 
-                              return (
-                                  <div key={dateKey} onClick={() => setSelectedDayDetail({ date: dateKey, logs: dayLogs, events: dayEvents })} style={{ cursor: "pointer", minHeight: cellMinHeight, background: theme.inputBg, borderRadius: "12px", padding: "6px", display: "flex", flexDirection: "column", gap: "4px", border: isToday ? `2px solid ${theme.primary}` : `1px solid ${theme.border}`, position: "relative" }}>
-                                      <div style={{ display: "flex", justifyContent: "center", position: "relative" }}>
-                                          <span style={{ fontSize: "12px", fontWeight: "bold", width: "20px", height: "20px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%", background: isToday ? theme.primary : "transparent", color: isToday ? "#ffffff" : theme.textMain }}>
-                                              {cell.day}
-                                          </span>
-                                          {hasLog && <div style={{ position: "absolute", right: "2px", top: "2px", width: "6px", height: "6px", background: theme.success, borderRadius: "50%", boxShadow: `0 0 5px ${theme.success}` }} title="有上課紀錄" />}
-                                      </div>
-                                      <div style={{ display: "flex", flexDirection: "column", gap: "3px", flex: 1, overflowY: "auto", scrollbarWidth: "none" }}>
-                                          {dayEvents.map((ev, eIdx) => {
-                                              const bgColor = getEventColor(ev);
-                                              return (
-                                                  <div key={eIdx} style={{ fontSize: "10px", padding: "3px 5px", borderRadius: "4px", background: bgColor, color: (ev.isCancelled || ev.type === 'cancellation') ? theme.textMuted : "#ffffff", textDecoration: (ev.isCancelled || ev.type === 'cancellation') ? "line-through" : "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginBottom: "2px" }}>
-                                                      {ev.isCancelled || ev.type === 'cancellation' ? `❌ ${ev.title}` : `${ev.time ? '[' + ev.time + '] ' : ''}${ev.title}`}
-                                                  </div>
-                                              );
-                                          })}
-                                      </div>
-                                  </div>
-                              );
-                          })}
+                            {dayEvents.map((ev, eIdx) => (
+                              <div
+                                key={eIdx}
+                                style={{
+                                  fontSize: "12px",
+                                  fontWeight: "bold",
+                                  color: (ev.isCancelled || ev.type === 'cancellation') ? theme.textMuted : "#ffffff",
+                                  textDecoration: (ev.isCancelled || ev.type === 'cancellation') ? "line-through" : "none",
+                                  background: getEventColor(ev),
+                                  padding: "6px 10px",
+                                  borderRadius: "8px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "6px"
+                                }}
+                              >
+                                {(ev.isCancelled || ev.type === 'cancellation') ? "❌ [停課]" : ev.type === 'exam' ? "🏆" : "📌"}
+                                {ev.time ? `[${ev.time}] ` : ""}{ev.title}
+                              </div>
+                            ))}
+
+                            {dayPlans.map((dp, pIdx) => (
+                              <div key={pIdx} style={{ fontSize: "12px", color: theme.primary, background: `${theme.primary}10`, padding: "6px 10px", borderRadius: "8px", fontWeight: "bold" }}>
+                                🎯 預排：{dp.subject} - {dp.planned_content}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })}
+                      {displayCells.filter(c => c !== null && (getEventsForDate(c.dateKey).length > 0 || studentData.classLogs.some((l: any) => l.class_date === c.dateKey) || coursePlans.some(p => p.planned_date === c.dateKey))).length === 0 && (
+                        <div style={{ textAlign: "center", padding: "30px", color: theme.textMuted, background: theme.inputBg, borderRadius: "14px", border: `1px dashed ${theme.border}` }}>
+                          此區間暫無排程或上課紀錄 ✨
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={isMobile ? { overflowX: "auto", paddingBottom: "10px", WebkitOverflowScrolling: "touch" } : {}}>
+                      <div style={isMobile ? { minWidth: "600px" } : {}}>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", textAlign: "center", marginBottom: "10px", fontWeight: "bold", fontSize: "12px", color: theme.textMuted }}>
+                            {WEEK_DAYS.map(d => <div key={d} style={{ padding: "5px 0" }}>{d}</div>)}
+                        </div>
+
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: "6px" }}>
+                            {displayCells.map((cell, idx) => {
+                                if (cell === null) return <div key={`blank-${idx}`} style={{ minHeight: "75px", background: "transparent" }} />;
+                                
+                                const dateKey = cell.dateKey;
+                                const dayEvents = getEventsForDate(dateKey);
+                                const dayLogs = studentData.classLogs.filter((l: any) => l.class_date === dateKey);
+                                const hasLog = dayLogs.length > 0;
+                                const isToday = getTodayDateString() === dateKey;
+                                
+                                const cellMinHeight = calendarView === "week" ? "120px" : "75px";
+
+                                return (
+                                    <div key={dateKey} onClick={() => setSelectedDayDetail({ date: dateKey, logs: dayLogs, events: dayEvents })} style={{ cursor: "pointer", minHeight: cellMinHeight, background: theme.inputBg, borderRadius: "12px", padding: "6px", display: "flex", flexDirection: "column", gap: "4px", border: isToday ? `2px solid ${theme.primary}` : `1px solid ${theme.border}`, position: "relative" }}>
+                                        <div style={{ display: "flex", justifyContent: "center", position: "relative" }}>
+                                            <span style={{ fontSize: "12px", fontWeight: "bold", width: "20px", height: "20px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%", background: isToday ? theme.primary : "transparent", color: isToday ? "#ffffff" : theme.textMain }}>
+                                                {cell.day}
+                                            </span>
+                                            {hasLog && <div style={{ position: "absolute", right: "2px", top: "2px", width: "6px", height: "6px", background: theme.success, borderRadius: "50%", boxShadow: `0 0 5px ${theme.success}` }} title="有上課紀錄" />}
+                                        </div>
+                                        <div style={{ display: "flex", flexDirection: "column", gap: "3px", flex: 1, overflowY: "auto", scrollbarWidth: "none" }}>
+                                            {dayEvents.map((ev, eIdx) => {
+                                                const bgColor = getEventColor(ev);
+                                                return (
+                                                    <div key={eIdx} style={{ fontSize: "10px", padding: "3px 5px", borderRadius: "4px", background: bgColor, color: (ev.isCancelled || ev.type === 'cancellation') ? theme.textMuted : "#ffffff", textDecoration: (ev.isCancelled || ev.type === 'cancellation') ? "line-through" : "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginBottom: "2px" }}>
+                                                        {ev.isCancelled || ev.type === 'cancellation' ? `❌ [停課] ${ev.title}` : `${ev.time ? '[' + ev.time + '] ' : ''}${ev.title}`}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
               </div>
           </div>
         )}
@@ -603,7 +808,7 @@ export default function StudentPortal() {
                           <div key={item.id} style={{ background: theme.card, padding: "18px", borderRadius: "16px", border: `1px solid ${theme.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: theme.shadow }}>
                               <div>
                                   <div style={{ fontWeight: "900", color: theme.textMain, fontSize: "15px" }}>{item.reward_title}</div>
-                                  <div style={{ fontSize: "12px", color: theme.textMuted, marginTop: "4px" }}>獲得於 {new Date(item.created_at).toLocaleDateString()}</div>
+                                  <div style={{ fontSize: "12px", color: theme.textMuted, marginTop: "4px" }}>獲得於 {formatDate(item.created_at)}</div>
                               </div>
                               <button onClick={() => handleUseItem(item)} style={{ background: theme.primary, color: "#fff", border: "none", padding: "8px 16px", borderRadius: "8px", fontWeight: "bold", fontSize: "13px", cursor: "pointer", boxShadow: `0 4px 10px ${theme.primary}40`, transition: "0.2s" }}>
                                   立即使用
@@ -623,7 +828,7 @@ export default function StudentPortal() {
                   {studentData.points.map((point: any) => (
                   <div key={point.id} style={{ ...cardStyle, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px" }}>
                       <div>
-                          <div style={{ fontSize: "13px", color: theme.textMuted, marginBottom: "6px" }}>{new Date(point.created_at).toLocaleDateString()}</div>
+                          <div style={{ fontSize: "13px", color: theme.textMuted, marginBottom: "6px" }}>{formatDate(point.created_at)}</div>
                           <div style={{ fontSize: "16px", fontWeight: "bold", color: theme.textMain }}>{point.reason}</div>
                       </div>
                       <div style={{ fontSize: "24px", fontWeight: "900", color: point.points > 0 ? theme.success : theme.danger }}>{point.points > 0 ? "+" : ""}{point.points}</div>
@@ -672,6 +877,39 @@ export default function StudentPortal() {
                 ) : <div style={{ fontSize: "14px", color: theme.textMuted, background: theme.card, padding: "15px", borderRadius: "12px", textAlign: "center", border: `1px solid ${theme.border}` }}>本日無特殊排程</div>}
              </div>
 
+             {/* 🎯 段考進度規劃 */}
+             {(() => {
+                const dayPlans = coursePlans.filter(p => p.planned_date === selectedDayDetail.date);
+                if (dayPlans.length === 0) return null;
+                return (
+                  <div style={{ marginBottom: "25px" }}>
+                    <div style={{ fontSize: "13px", fontWeight: "bold", color: theme.textMuted, marginBottom: "10px", borderBottom: `2px dashed ${theme.border}`, paddingBottom: "5px" }}>🎯 段考進度規劃</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                      {dayPlans.map((plan, pIdx) => (
+                        <div key={plan.id || pIdx} style={{ background: theme.card, padding: "14px", borderRadius: "14px", border: `1px solid ${theme.border}`, borderLeft: `5px solid ${COLORS[plan.subject] || theme.primary}`, boxShadow: theme.shadow }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                            <span style={{ fontWeight: "bold", fontSize: "13px", color: COLORS[plan.subject] || theme.primary }}>{plan.subject} 進度</span>
+                            {plan.status === 'on_track' && (
+                              <span style={{ fontSize: "11px", color: theme.success, fontWeight: "bold", background: `${theme.success}15`, padding: "2px 8px", borderRadius: "6px" }}>🟢 吻合</span>
+                            )}
+                            {plan.status === 'modified' && (
+                              <span style={{ fontSize: "11px", color: "#f59e0b", fontWeight: "bold", background: "rgba(245,158,11,0.15)", padding: "2px 8px", borderRadius: "6px" }}>🟡 微調</span>
+                            )}
+                            {(!plan.status || plan.status === 'pending') && (
+                              <span style={{ fontSize: "11px", color: theme.textMuted, background: theme.inputBg, padding: "2px 8px", borderRadius: "6px" }}>⏳ 待上課</span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: "14px", fontWeight: "bold", color: theme.textMain }}>{plan.planned_content}</div>
+                          {plan.actual_content && (
+                            <div style={{ fontSize: "12px", color: theme.textMuted, marginTop: "4px" }}>實際：{plan.actual_content}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+             })()}
+
              <div>
                 <div style={{ fontSize: "13px", fontWeight: "bold", color: theme.textMuted, marginBottom: "10px", borderBottom: `2px dashed ${theme.border}`, paddingBottom: "5px" }}>📖 上課紀錄</div>
                 {selectedDayDetail.logs.length > 0 ? (
@@ -707,6 +945,18 @@ export default function StudentPortal() {
           </div>
         </div>
       )}
+
+      {/* 互動確認對話框 */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        cancelText={confirmModal.cancelText}
+        isDanger={confirmModal.isDanger}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+      />
 
       <style jsx>{` @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } ::-webkit-scrollbar { width: 0px; background: transparent; } `}</style>
     </div>
