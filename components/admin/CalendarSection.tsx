@@ -91,14 +91,26 @@ export function CalendarSection({
 
   const handleAddEvent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!evTitle.trim()) return showToast("請輸入活動標題", "warning");
+    const titleTrimmed = evTitle.trim();
+    let finalType = evType;
+    if (
+      finalType === "class" &&
+      (titleTrimmed.includes("段考") ||
+        titleTrimmed.includes("模考") ||
+        titleTrimmed.includes("會考") ||
+        titleTrimmed.includes("期中") ||
+        titleTrimmed.includes("期末") ||
+        titleTrimmed.includes("大考"))
+    ) {
+      finalType = "exam";
+    }
 
     setLoading(true);
     const payload = {
       event_date: evDate,
       end_date: evEndDate,
-      title: evTitle.trim(),
-      type: evType,
+      title: titleTrimmed,
+      type: finalType,
       student_name: evStudent,
       is_recurring: evIsRecurring,
       recurring_pattern: evIsRecurring ? "weekly" : null,
@@ -388,7 +400,21 @@ export function CalendarSection({
           type="text"
           placeholder="活動名稱 (例: 數學常態複習課、英文第二次段考)"
           value={evTitle}
-          onChange={(e) => setEvTitle(e.target.value)}
+          onChange={(e) => {
+            const val = e.target.value;
+            setEvTitle(val);
+            if (
+              evType === "class" &&
+              (val.includes("段考") ||
+                val.includes("模考") ||
+                val.includes("會考") ||
+                val.includes("期中") ||
+                val.includes("期末") ||
+                val.includes("大考"))
+            ) {
+              setEvType("exam");
+            }
+          }}
           style={inputStyle}
         />
 

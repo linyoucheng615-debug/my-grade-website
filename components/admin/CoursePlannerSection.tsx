@@ -44,7 +44,13 @@ export function CoursePlannerSection({
     const todayStr = new Date().toLocaleDateString("en-CA");
     const nextExam = events.find(
       (e: any) =>
-        (e.type === "exam" || e.title?.includes("段考") || e.title?.includes("模考")) &&
+        (e.type === "exam" ||
+          e.title?.includes("段考") ||
+          e.title?.includes("模考") ||
+          e.title?.includes("會考") ||
+          e.title?.includes("期中") ||
+          e.title?.includes("期末") ||
+          e.title?.includes("大考")) &&
         e.event_date >= todayStr
     );
 
@@ -58,20 +64,31 @@ export function CoursePlannerSection({
     const classDates: { date: string; eventId: number }[] = [];
     const maxScanDays = 90;
 
-    // 比對時間標準化至本地 00:00:00 與 23:59:59
+    // 比對時間標準化至本地 00:00:00
     let curr = new Date();
     curr.setHours(0, 0, 0, 0);
 
+    // ★ 段考前規劃：課堂進度推算到「段考日前一天」為止（段考當天為考試日，不排課堂進度）
     const scanLimitDate = targetExamDate
-      ? new Date(`${targetExamDate}T23:59:59`)
+      ? new Date(`${targetExamDate}T00:00:00`)
       : new Date(Date.now() + maxScanDays * 86400000);
-    scanLimitDate.setHours(23, 59, 59, 999);
 
-    while (curr <= scanLimitDate) {
+    while (curr < scanLimitDate) {
       const dStr = curr.toLocaleDateString("en-CA");
       const dayOfWeek = curr.getDay();
 
       for (const ev of events) {
+        // ★ 嚴格排除任何段考、模考與測驗事件（避免因 type 誤設導致考試日被當成上課日）
+        const isExam =
+          ev.type === "exam" ||
+          ev.title?.includes("段考") ||
+          ev.title?.includes("模考") ||
+          ev.title?.includes("會考") ||
+          ev.title?.includes("期中") ||
+          ev.title?.includes("期末") ||
+          ev.title?.includes("大考");
+        if (isExam) continue;
+
         if (ev.type !== "class" && ev.type !== undefined) continue;
         if (ev.student_name !== studentName && ev.student_name !== "全體") continue;
         if (
@@ -144,7 +161,7 @@ export function CoursePlannerSection({
     }
   }, [selectedName, plannerSubject]);
 
-  // ★ 優化：改為單次 Batch Upsert 批次儲存
+  // ★ 優化：改為單次 Batch Upsert 批次儲存，並自動清理過期或無效日期的舊進度
   const handleSaveAllPlans = async () => {
     if (!selectedName) return showToast("請先選擇學生！", "warning");
     setPlannerLoading(true);
@@ -163,6 +180,24 @@ export function CoursePlannerSection({
     });
 
     const { error } = await supabase.from("course_plans").upsert(rowsPayload);
+
+    // 同步清理已不在現行排程中的舊孤立紀錄（如已改期、取消或誤排入段考日者）
+    const validDates = new Set(plannerRows.map((r) => r.date));
+    const { data: currentDbPlans } = await supabase
+      .from("course_plans")
+      .select("id, planned_date")
+      .eq("student_name", selectedName)
+      .eq("subject", plannerSubject);
+
+    if (currentDbPlans && currentDbPlans.length > 0) {
+      const obsoleteIds = currentDbPlans
+        .filter((p) => !validDates.has(p.planned_date))
+        .map((p) => p.id);
+      if (obsoleteIds.length > 0) {
+        await supabase.from("course_plans").delete().in("id", obsoleteIds);
+      }
+    }
+
     setPlannerLoading(false);
 
     if (error) {
