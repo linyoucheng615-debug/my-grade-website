@@ -1,17 +1,19 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { User, Lock, BookOpen, MessageSquare, DollarSign, TrendingUp, Home, Calendar, Award, LogOut, Coins, FileText, ChevronDown, ChevronUp, Sun, Moon, Filter, ChevronLeft, ChevronRight, X, ShoppingBag, Target } from "lucide-react";
+import { User, Lock, BookOpen, MessageSquare, DollarSign, TrendingUp, Home, Calendar, Award, LogOut, Coins, FileText, ChevronDown, ChevronUp, Sun, Moon, Filter, ChevronLeft, ChevronRight, X, ShoppingBag, Target, HelpCircle } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { supabase } from "@/lib/supabaseClient";
 import { SUBJECTS, SUBJECT_COLORS as COLORS, WEEK_DAYS } from "@/lib/constants";
 import { getTodayDateString, getCurrentMonthString, formatDate } from "@/lib/dateUtils";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { StudentGuideModal } from "@/components/guide/StudentGuideModal";
 import type { CalendarEvent, ClassLog, Grade, PointLog, Reward, Student, StudentInventory, CoursePlan } from "@/types/database";
 
 export default function StudentPortal() {
   const { showToast } = useToast();
+  const [showGuide, setShowGuide] = useState(false);
   const [loginName, setLoginName] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [studentData, setStudentData] = useState<{
@@ -337,7 +339,46 @@ export default function StudentPortal() {
   if (!studentData) return (
     <div style={{ ...globalContainerStyle, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "20px" }}>
       <style jsx global>{` body { background-color: ${theme.bodyBg}; margin: 0; transition: background-color 0.5s ease; } `}</style>
-      <button onClick={toggleTheme} style={{ position: "absolute", top: 20, right: 20, background: theme.card, border: `1px solid ${theme.border}`, padding: "10px", borderRadius: "50%", color: theme.textMain, cursor: "pointer", boxShadow: theme.shadow }}>{isDarkMode ? <Sun size={20} /> : <Moon size={20} />}</button>
+      <div style={{ position: "absolute", top: 20, right: 20, display: "flex", gap: "10px" }}>
+        <button
+          onClick={() => setShowGuide(true)}
+          style={{
+            background: theme.card,
+            border: `1px solid ${theme.border}`,
+            padding: "10px",
+            borderRadius: "50%",
+            color: theme.primary,
+            cursor: "pointer",
+            boxShadow: theme.shadow,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            transition: "0.2s",
+          }}
+          title="系統使用教學"
+        >
+          <HelpCircle size={20} />
+        </button>
+        <button
+          onClick={toggleTheme}
+          style={{
+            background: theme.card,
+            border: `1px solid ${theme.border}`,
+            padding: "10px",
+            borderRadius: "50%",
+            color: theme.textMain,
+            cursor: "pointer",
+            boxShadow: theme.shadow,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            transition: "0.2s",
+          }}
+          title="切換深淺色模式"
+        >
+          {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+        </button>
+      </div>
       <div style={{ ...cardStyle, width: "100%", maxWidth: "360px", textAlign: "center" }}>
         <h1 style={{ color: theme.primary, fontSize: "28px", marginBottom: "10px", fontWeight: "900" }}>🎒 學習儀表板</h1>
         <p style={{ color: theme.textMuted, marginBottom: "30px", fontSize: "14px" }}>登入以查詢專屬進度與成績</p>
@@ -350,6 +391,7 @@ export default function StudentPortal() {
            <button onClick={() => window.location.href = '/admin'} style={{ background: "transparent", color: theme.textMuted, border: "none", cursor: "pointer", fontSize: "14px", display: "flex", alignItems: "center", justifyContent: "center", width: "100%", gap: "8px", transition: "0.2s" }} onMouseOver={(e) => e.currentTarget.style.color = theme.primary} onMouseOut={(e) => e.currentTarget.style.color = theme.textMuted}>👨‍🏫 我是老師，切換至後台</button>
         </div>
       </div>
+      <StudentGuideModal isOpen={showGuide} onClose={() => setShowGuide(false)} isDarkMode={isDarkMode} />
     </div>
   );
 
@@ -424,9 +466,28 @@ export default function StudentPortal() {
              <h2 style={{ margin: 0, fontSize: "24px", fontWeight: "900", color: theme.textMain }}>👋 {studentData.info.name}</h2>
              <p style={{ margin: "5px 0 0 0", color: theme.textMuted, fontSize: "13px" }}>分數無法決定價值，只有你自己可以</p>
           </div>
-          <div style={{ display: "flex", gap: "10px" }}>
-             <button onClick={toggleTheme} style={{ background: theme.card, border: `1px solid ${theme.border}`, padding: "10px", borderRadius: "50%", color: theme.textMain, cursor: "pointer", boxShadow: theme.shadow, transition: "0.2s" }}>{isDarkMode ? <Sun size={18} /> : <Moon size={18} />}</button>
-             <button onClick={handleLogout} style={{ background: theme.card, border: `1px solid ${theme.border}`, padding: "10px", borderRadius: "50%", color: theme.danger, cursor: "pointer", boxShadow: theme.shadow, transition: "0.2s" }}><LogOut size={18} /></button>
+          <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+             <button
+               onClick={() => setShowGuide(true)}
+               style={{
+                 background: theme.card,
+                 border: `1px solid ${theme.border}`,
+                 padding: "10px",
+                 borderRadius: "50%",
+                 color: theme.primary,
+                 cursor: "pointer",
+                 boxShadow: theme.shadow,
+                 display: "flex",
+                 alignItems: "center",
+                 justifyContent: "center",
+                 transition: "0.2s",
+               }}
+               title="系統使用教學"
+             >
+               <HelpCircle size={18} />
+             </button>
+             <button onClick={toggleTheme} style={{ background: theme.card, border: `1px solid ${theme.border}`, padding: "10px", borderRadius: "50%", color: theme.textMain, cursor: "pointer", boxShadow: theme.shadow, display: "flex", alignItems: "center", justifyContent: "center", transition: "0.2s" }} title="切換深淺色模式">{isDarkMode ? <Sun size={18} /> : <Moon size={18} />}</button>
+             <button onClick={handleLogout} style={{ background: theme.card, border: `1px solid ${theme.border}`, padding: "10px", borderRadius: "50%", color: theme.danger, cursor: "pointer", boxShadow: theme.shadow, display: "flex", alignItems: "center", justifyContent: "center", transition: "0.2s" }} title="登出"><LogOut size={18} /></button>
           </div>
         </div>
 
@@ -956,6 +1017,12 @@ export default function StudentPortal() {
         isDanger={confirmModal.isDanger}
         onConfirm={confirmModal.onConfirm}
         onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+      />
+
+      <StudentGuideModal
+        isOpen={showGuide}
+        onClose={() => setShowGuide(false)}
+        isDarkMode={isDarkMode}
       />
 
       <style jsx>{` @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } ::-webkit-scrollbar { width: 0px; background: transparent; } `}</style>

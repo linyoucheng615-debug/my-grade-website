@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Check, Copy, FileText } from "lucide-react";
+import { Check, Copy, FileText, Users, CreditCard } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
-import { BANK_ACCOUNT, SUBJECTS } from "@/lib/constants";
+import { SUBJECTS } from "@/lib/constants";
 import { getCurrentMonthString } from "@/lib/dateUtils";
 import { useToast } from "@/components/ui/Toast";
 import type { AdminTheme } from "./adminTheme";
@@ -13,15 +13,19 @@ interface TuitionSectionProps {
   theme: AdminTheme;
   isDarkMode: boolean;
   selectedName: string;
+  studentList?: any[];
+  currentTeacherName?: string;
 }
 
 export function TuitionSection({
   theme,
   isDarkMode,
   selectedName,
+  studentList = [],
+  currentTeacherName = "",
 }: TuitionSectionProps) {
   const { showToast } = useToast();
-  const { solidCardStyle, inputStyle, btnStyle } = getCommonStyles(theme);
+  const { solidCardStyle, inputStyle, selectStyle, btnStyle } = getCommonStyles(theme);
 
   const [loading, setLoading] = useState(false);
   const [tuitionMonth, setTuitionMonth] = useState(getCurrentMonthString());
@@ -29,6 +33,38 @@ export function TuitionSection({
   const [localRates, setLocalRates] = useState<Record<string, number>>({});
   const [billingText, setBillingText] = useState("");
   const [isCopied, setIsCopied] = useState(false);
+
+  // 自訂個人匯款帳號（留空則留白，絕不強制帶入死帳號）
+  const [customBankAccount, setCustomBankAccount] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const key = currentTeacherName ? `teacherBankAccount_${currentTeacherName}` : "teacherBankAccount";
+      return localStorage.getItem(key) || "";
+    }
+    return "";
+  });
+
+  // 當切換老師時同步讀取對應的個人受款帳號
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const key = currentTeacherName ? `teacherBankAccount_${currentTeacherName}` : "teacherBankAccount";
+      setCustomBankAccount(localStorage.getItem(key) || "");
+    }
+  }, [currentTeacherName]);
+
+  // 雙學生合併結算狀態
+  const [isCombinedMode, setIsCombinedMode] = useState<boolean>(false);
+  const candidateSecondStudents = (studentList || []).filter((s) => s.name !== selectedName);
+  const [secondStudentName, setSecondStudentName] = useState<string>(
+    candidateSecondStudents[0]?.name || ""
+  );
+  const [student2Details, setStudent2Details] = useState<any[]>([]);
+
+  // 當主要學生變更時，若第二位學生與主要學生相同，自動切換至其他候選學生
+  useEffect(() => {
+    if (secondStudentName === selectedName && candidateSecondStudents.length > 0) {
+      setSecondStudentName(candidateSecondStudents[0].name);
+    }
+  }, [selectedName]);
 
   const fetchRates = async () => {
     if (!selectedName) return;
@@ -45,36 +81,29 @@ export function TuitionSection({
   useEffect(() => {
     fetchRates();
     setTuitionDetails([]);
+    setStudent2Details([]);
     setBillingText("");
   }, [selectedName]);
 
-  const handleTuitionCheck = async () => {
-    if (!selectedName) return showToast("請先選擇學生！", "warning");
-    setLoading(true);
+  // 查詢單一學生指定月份的課程與學費明細
+  const fetchStudentTuition = async (studentName: string) => {
+    if (!studentName) return [];
     const { data: classes } = await supabase
       .from("class_logs")
       .select("*")
-      .eq("student_name", selectedName)
+      .eq("student_name", studentName)
       .ilike("class_date", `${tuitionMonth}%`)
       .order("class_date", { ascending: true });
 
     const { data: rates = [] } = await supabase
       .from("subject_rates")
       .select("*")
-      .eq("student_name", selectedName);
-
-    setLoading(false);
-    setBillingText("");
-
-    if (!classes || classes.length === 0) {
-      setTuitionDetails([]);
-      return showToast("⚠️ 本月查無該學生的補習紀錄", "info");
-    }
+      .eq("student_name", studentName);
 
     const rateMap: Record<string, number> = {};
-    rates?.forEach((r) => (rateMap[r.subject] = r.rate));
+    rates?.forEach((r: any) => (rateMap[r.subject] = r.rate));
 
-    const details = classes.map((c) => {
+    const details = (classes || []).map((c: any) => {
       const sub = c.subject || "數學";
       const rate = rateMap[sub] || 0;
       const extra = c.expense || 0;
@@ -82,39 +111,125 @@ export function TuitionSection({
       return { ...c, rate, total, extra };
     });
 
-    setTuitionDetails(details);
-    showToast(`✅ 已結算出 ${details.length} 堂課程明細`, "success");
+    return details;
+  };
+
+  const handleTuitionCheck = async () => {
+    if (!selectedName) return showToast("請先選擇學生！", "warning");
+    if (isCombinedMode && !secondStudentName) {
+      return showToast("請選擇第二位要合併結算的學生！", "warning");
+    }
+
+    setLoading(true);
+    setBillingText("");
+
+    const details1 = await fetchStudentTuition(selectedName);
+    setTuitionDetails(details1);
+
+    if (isCombinedMode) {
+      const details2 = await fetchStudentTuition(secondStudentName);
+      setStudent2Details(details2);
+      setLoading(false);
+
+      if (details1.length === 0 && details2.length === 0) {
+        return showToast(`⚠️ ${selectedName} 與 ${secondStudentName} 本月均查無補習紀錄`, "info");
+      }
+      showToast(
+        `✅ 已合併結算：${selectedName} (${details1.length} 堂) 與 ${secondStudentName} (${details2.length} 堂)`,
+        "success"
+      );
+    } else {
+      setStudent2Details([]);
+      setLoading(false);
+      if (details1.length === 0) {
+        return showToast("⚠️ 本月查無該學生的補習紀錄", "info");
+      }
+      showToast(`✅ 已結算出 ${details1.length} 堂課程明細`, "success");
+    }
   };
 
   const generateBillingText = () => {
-    if (tuitionDetails.length === 0) {
+    if (tuitionDetails.length === 0 && (!isCombinedMode || student2Details.length === 0)) {
       showToast("請先按「核算學費」取得資料喔！", "warning");
       return;
     }
+
     const month = parseInt(tuitionMonth.split("-")[1], 10);
-    const grouped: Record<string, any[]> = {};
-    tuitionDetails.forEach((d) => {
-      const sub = d.subject || "其他";
-      if (!grouped[sub]) grouped[sub] = [];
-      grouped[sub].push(d);
-    });
 
-    let text = `${selectedName}媽媽您好：\n${month}月的課程已經結束囉！\n\n`;
-    Object.keys(grouped).forEach((sub) => {
-      text += `${sub}:\n`;
-      grouped[sub].forEach((item) => {
-        const dObj = new Date(item.class_date);
-        const dateStr = `${dObj.getMonth() + 1}/${dObj.getDate()}`;
-        const extraText = item.extra > 0 ? ` (+雜費${item.extra})` : "";
-        text += `${dateStr} ${item.duration}h${extraText}\n`;
+    const formatStudentClasses = (name: string, details: any[]) => {
+      if (details.length === 0) return `【${name}】\n本月無上課紀錄\n`;
+      const grouped: Record<string, any[]> = {};
+      details.forEach((d) => {
+        const sub = d.subject || "其他";
+        if (!grouped[sub]) grouped[sub] = [];
+        grouped[sub].push(d);
       });
-      text += "\n";
-    });
 
-    const totalHours = tuitionDetails.reduce((a, b) => a + Number(b.duration), 0);
-    const totalCost = tuitionDetails.reduce((a, b) => a + b.total, 0);
-    text += `共 ${totalHours}h\n課程費用共 ${totalCost.toLocaleString()} 元\n\n`;
-    text += `共 ${totalCost.toLocaleString()} 元，確認無誤後，麻煩媽媽方便的時候幫我匯到以下帳戶：\n${BANK_ACCOUNT}`;
+      let subText = `【${name}】\n`;
+      Object.keys(grouped).forEach((sub) => {
+        subText += `${sub}:\n`;
+        grouped[sub].forEach((item) => {
+          const dObj = new Date(item.class_date);
+          const dateStr = `${dObj.getMonth() + 1}/${dObj.getDate()}`;
+          const extraText = item.extra > 0 ? ` (+雜費${item.extra})` : "";
+          subText += `${dateStr} ${item.duration}h${extraText}\n`;
+        });
+        subText += "\n";
+      });
+
+      const hours = details.reduce((a, b) => a + Number(b.duration), 0);
+      const cost = details.reduce((a, b) => a + b.total, 0);
+      subText += `共 ${hours}h，費用 ${cost.toLocaleString()} 元\n`;
+      return subText;
+    };
+
+    let text = "";
+    // 受款帳號位置：若有填寫則條列，若留白則直接留白不帶任何預設
+    const bankSection = customBankAccount.trim()
+      ? `確認無誤後，麻煩媽媽方便的時候幫我匯到以下帳戶：\n${customBankAccount.trim()}`
+      : `確認無誤後，麻煩媽媽方便的時候再幫我匯款，謝謝您！\n`;
+
+    if (!isCombinedMode) {
+      const grouped: Record<string, any[]> = {};
+      tuitionDetails.forEach((d) => {
+        const sub = d.subject || "其他";
+        if (!grouped[sub]) grouped[sub] = [];
+        grouped[sub].push(d);
+      });
+
+      text = `${selectedName}媽媽您好：\n${month}月的課程已經結束囉！\n\n`;
+      Object.keys(grouped).forEach((sub) => {
+        text += `${sub}:\n`;
+        grouped[sub].forEach((item) => {
+          const dObj = new Date(item.class_date);
+          const dateStr = `${dObj.getMonth() + 1}/${dObj.getDate()}`;
+          const extraText = item.extra > 0 ? ` (+雜費${item.extra})` : "";
+          text += `${dateStr} ${item.duration}h${extraText}\n`;
+        });
+        text += "\n";
+      });
+
+      const totalHours = tuitionDetails.reduce((a, b) => a + Number(b.duration), 0);
+      const totalCost = tuitionDetails.reduce((a, b) => a + b.total, 0);
+      text += `共 ${totalHours}h\n課程費用共 ${totalCost.toLocaleString()} 元\n\n`;
+      text += bankSection;
+    } else {
+      const s1Hours = tuitionDetails.reduce((a, b) => a + Number(b.duration), 0);
+      const s1Cost = tuitionDetails.reduce((a, b) => a + b.total, 0);
+      const s2Hours = student2Details.reduce((a, b) => a + Number(b.duration), 0);
+      const s2Cost = student2Details.reduce((a, b) => a + b.total, 0);
+      const grandTotalHours = s1Hours + s2Hours;
+      const grandTotalCost = s1Cost + s2Cost;
+
+      text = `${selectedName}、${secondStudentName} 媽媽您好：\n${month}月的課程已經結束囉！以下為兩位同學的課程費用明細：\n\n`;
+      text += formatStudentClasses(selectedName, tuitionDetails) + "\n";
+      text += formatStudentClasses(secondStudentName, student2Details) + "\n";
+      text += `------------------------\n`;
+      text += `合計總時數：${grandTotalHours}h\n`;
+      text += `兩位同學費用總計：${grandTotalCost.toLocaleString()} 元\n\n`;
+      text += bankSection;
+    }
+
     setBillingText(text);
   };
 
@@ -146,10 +261,95 @@ export function TuitionSection({
     }
   };
 
+  const s1Hours = tuitionDetails.reduce((a, b) => a + Number(b.duration), 0);
+  const s1Total = tuitionDetails.reduce((a, b) => a + b.total, 0);
+  const s2Hours = student2Details.reduce((a, b) => a + Number(b.duration), 0);
+  const s2Total = student2Details.reduce((a, b) => a + b.total, 0);
+
   return (
     <>
       <div style={solidCardStyle}>
         <h3 style={{ color: theme.textMain, marginBottom: "20px" }}>💰 月底學費結算與明細生成</h3>
+
+        {/* 雙學生合併結算勾選開關 */}
+        <div
+          style={{
+            marginBottom: "18px",
+            background: isCombinedMode ? `${theme.primary}12` : theme.inputBg,
+            padding: "14px 16px",
+            borderRadius: "14px",
+            border: `1px solid ${isCombinedMode ? theme.primary : theme.border}`,
+            transition: "all 0.2s ease",
+          }}
+        >
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              cursor: "pointer",
+              fontSize: "14px",
+              fontWeight: "bold",
+              color: theme.textMain,
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={isCombinedMode}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setIsCombinedMode(checked);
+                if (checked && !secondStudentName && candidateSecondStudents.length > 0) {
+                  setSecondStudentName(candidateSecondStudents[0].name);
+                }
+              }}
+              style={{ width: "18px", height: "18px", cursor: "pointer" }}
+            />
+            <Users size={18} color={theme.primary} /> 合併第二位學生結算（兄弟姊妹 / 同家長）
+          </label>
+
+          {isCombinedMode && (
+            <div
+              style={{
+                marginTop: "12px",
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                flexWrap: "wrap",
+                animation: "fadeIn 0.2s ease",
+              }}
+            >
+              <span style={{ fontSize: "13px", fontWeight: "bold", color: theme.primary }}>
+                第二位學生：
+              </span>
+              {candidateSecondStudents.length === 0 ? (
+                <span style={{ fontSize: "13px", color: theme.danger }}>
+                  ⚠️ 目前名單中無其他可合併的學生
+                </span>
+              ) : (
+                <select
+                  value={secondStudentName}
+                  onChange={(e) => setSecondStudentName(e.target.value)}
+                  style={{
+                    ...selectStyle,
+                    margin: 0,
+                    width: "auto",
+                    minWidth: "160px",
+                    fontWeight: "bold",
+                  }}
+                >
+                  {candidateSecondStudents.map((s) => (
+                    <option key={s.id} value={s.name}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 月份選擇與操作按鈕 */}
         <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
           <input
             type="month"
@@ -168,7 +368,7 @@ export function TuitionSection({
               whiteSpace: "nowrap",
             }}
           >
-            {loading ? "計算中..." : "核算學費"}
+            {loading ? "計算中..." : isCombinedMode ? "核算雙人學費" : "核算學費"}
           </button>
           <button
             onClick={generateBillingText}
@@ -187,6 +387,49 @@ export function TuitionSection({
           </button>
         </div>
 
+        {/* 自訂受款帳號設定（留白則不帶入死帳號） */}
+        <div
+          style={{
+            marginTop: "20px",
+            background: theme.inputBg,
+            padding: "14px 16px",
+            borderRadius: "14px",
+            border: `1px solid ${theme.border}`,
+          }}
+        >
+          <label
+            style={{
+              fontSize: "13px",
+              fontWeight: "bold",
+              color: theme.primary,
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              marginBottom: "8px",
+            }}
+          >
+            <CreditCard size={16} /> 匯款受款帳戶（留白則訊息位置直接留空，不帶入任何帳號）：
+          </label>
+          <input
+            type="text"
+            value={customBankAccount}
+            onChange={(e) => {
+              const val = e.target.value;
+              setCustomBankAccount(val);
+              const key = currentTeacherName
+                ? `teacherBankAccount_${currentTeacherName}`
+                : "teacherBankAccount";
+              localStorage.setItem(key, val);
+            }}
+            placeholder="例：（822） 129541918532 戶名：王小明 (未填寫此段將留空)"
+            style={inputStyle}
+          />
+          <div style={{ fontSize: "12px", color: theme.textMuted, marginTop: "6px" }}>
+            💡 系統會為您自動儲存此帳號；若不填寫，請款訊息將不會出現任何預設帳號。
+          </div>
+        </div>
+
+        {/* 請款文案預覽與複製區塊 */}
         {billingText && (
           <div style={{ marginTop: "25px", position: "relative", animation: "fadeIn 0.3s ease" }}>
             <label style={{ fontWeight: "bold", color: "#6366f1", marginBottom: "8px", display: "block" }}>
@@ -197,7 +440,7 @@ export function TuitionSection({
               onChange={(e) => setBillingText(e.target.value)}
               style={{
                 width: "100%",
-                height: "220px",
+                height: isCombinedMode ? "280px" : "220px",
                 padding: "18px",
                 borderRadius: "16px",
                 border: `2px solid ${isDarkMode ? "#4338ca" : "#6366f1"}`,
@@ -235,8 +478,12 @@ export function TuitionSection({
           </div>
         )}
 
-        {tuitionDetails.length > 0 && (
+        {/* 單一學生明細展示 */}
+        {!isCombinedMode && tuitionDetails.length > 0 && (
           <div style={{ marginTop: "25px", borderTop: `2px dashed ${theme.border}`, paddingTop: "20px" }}>
+            <h4 style={{ margin: "0 0 15px 0", color: theme.textMain, fontWeight: "bold" }}>
+              👤 {selectedName} 的課程明細 ({tuitionDetails.length} 堂)
+            </h4>
             {tuitionDetails.map((t) => (
               <div
                 key={t.id}
@@ -280,7 +527,7 @@ export function TuitionSection({
             <div
               style={{
                 textAlign: "right",
-                fontSize: "28px",
+                fontSize: "24px",
                 fontWeight: "900",
                 marginTop: "20px",
                 color: theme.danger,
@@ -289,7 +536,129 @@ export function TuitionSection({
               }}
             >
               本月學費總計：$
-              {tuitionDetails.reduce((a, b) => a + b.total, 0).toLocaleString()} 元
+              {s1Total.toLocaleString()} 元 ({s1Hours} hr)
+            </div>
+          </div>
+        )}
+
+        {/* 雙學生合併明細展示 */}
+        {isCombinedMode && (tuitionDetails.length > 0 || student2Details.length > 0) && (
+          <div style={{ marginTop: "25px", borderTop: `2px dashed ${theme.border}`, paddingTop: "20px" }}>
+            {/* 學生一卡片區 */}
+            <div style={{ marginBottom: "25px" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "12px",
+                }}
+              >
+                <h4 style={{ margin: 0, color: theme.textMain, fontWeight: "900", fontSize: "16px" }}>
+                  👤 學生一：{selectedName} ({tuitionDetails.length} 堂)
+                </h4>
+                <span style={{ fontWeight: "bold", color: theme.primary, fontSize: "15px" }}>
+                  小計：${s1Total.toLocaleString()} 元 ({s1Hours} hr)
+                </span>
+              </div>
+              {tuitionDetails.length === 0 ? (
+                <div style={{ padding: "12px", background: theme.inputBg, borderRadius: "10px", color: theme.textMuted, fontSize: "13px" }}>
+                  本月無上課紀錄
+                </div>
+              ) : (
+                tuitionDetails.map((t) => (
+                  <div
+                    key={t.id}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      padding: "12px 15px",
+                      background: theme.inputBg,
+                      borderRadius: "12px",
+                      marginBottom: "8px",
+                      border: `1px solid ${theme.border}`,
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: "bold", fontSize: "14px", color: theme.textMain }}>
+                        {t.class_date} ({t.subject})
+                      </div>
+                      <div style={{ fontSize: "12px", color: theme.textMuted, marginTop: "2px" }}>
+                        {t.duration} hr × ${t.rate}/hr {t.extra > 0 && `+ 雜費 ${t.extra}`}
+                      </div>
+                    </div>
+                    <span style={{ fontWeight: "bold", color: theme.textMain, fontSize: "15px" }}>
+                      ${t.total}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* 學生二卡片區 */}
+            <div style={{ marginBottom: "20px" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "12px",
+                }}
+              >
+                <h4 style={{ margin: 0, color: theme.textMain, fontWeight: "900", fontSize: "16px" }}>
+                  👤 學生二：{secondStudentName} ({student2Details.length} 堂)
+                </h4>
+                <span style={{ fontWeight: "bold", color: theme.primary, fontSize: "15px" }}>
+                  小計：${s2Total.toLocaleString()} 元 ({s2Hours} hr)
+                </span>
+              </div>
+              {student2Details.length === 0 ? (
+                <div style={{ padding: "12px", background: theme.inputBg, borderRadius: "10px", color: theme.textMuted, fontSize: "13px" }}>
+                  本月無上課紀錄
+                </div>
+              ) : (
+                student2Details.map((t) => (
+                  <div
+                    key={t.id}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      padding: "12px 15px",
+                      background: theme.inputBg,
+                      borderRadius: "12px",
+                      marginBottom: "8px",
+                      border: `1px solid ${theme.border}`,
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: "bold", fontSize: "14px", color: theme.textMain }}>
+                        {t.class_date} ({t.subject})
+                      </div>
+                      <div style={{ fontSize: "12px", color: theme.textMuted, marginTop: "2px" }}>
+                        {t.duration} hr × ${t.rate}/hr {t.extra > 0 && `+ 雜費 ${t.extra}`}
+                      </div>
+                    </div>
+                    <span style={{ fontWeight: "bold", color: theme.textMain, fontSize: "15px" }}>
+                      ${t.total}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* 雙人合併總計橫幅 */}
+            <div
+              style={{
+                textAlign: "right",
+                fontSize: "24px",
+                fontWeight: "900",
+                marginTop: "20px",
+                color: theme.danger,
+                borderTop: `2px solid ${theme.border}`,
+                paddingTop: "15px",
+              }}
+            >
+              兩位學生合計總學費：${(s1Total + s2Total).toLocaleString()} 元 (共 {s1Hours + s2Hours} hr)
             </div>
           </div>
         )}
@@ -370,4 +739,3 @@ export function TuitionSection({
     </>
   );
 }
-

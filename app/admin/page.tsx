@@ -8,6 +8,7 @@ import {
   Coins,
   DollarSign,
   FileText,
+  HelpCircle,
   Home,
   Lock,
   LogOut,
@@ -35,11 +36,13 @@ import { TuitionSection } from "@/components/admin/TuitionSection";
 import { ReportSection } from "@/components/admin/ReportSection";
 import { CoursePlannerSection } from "@/components/admin/CoursePlannerSection";
 import { StudentSettingsSection } from "@/components/admin/StudentSettingsSection";
+import { TeacherGuideModal } from "@/components/guide/TeacherGuideModal";
 
 export default function AdminPage() {
   const { showToast } = useToast();
 
   // 鑑權與全域狀態
+  const [showGuide, setShowGuide] = useState(false);
   const [currentTeacher, setCurrentTeacher] = useState<any>(() => {
     if (typeof window !== "undefined") {
       const savedData = localStorage.getItem("teacherData");
@@ -337,23 +340,46 @@ export default function AdminPage() {
             transition: background-color 0.5s ease;
           }
         `}</style>
-        <button
-          onClick={toggleTheme}
-          style={{
-            position: "absolute",
-            top: 20,
-            right: 20,
-            background: theme.card,
-            border: `1px solid ${theme.border}`,
-            padding: "10px",
-            borderRadius: "50%",
-            color: theme.textMain,
-            cursor: "pointer",
-            boxShadow: theme.shadow,
-          }}
-        >
-          <Sun size={20} />
-        </button>
+        <div style={{ position: "absolute", top: 20, right: 20, display: "flex", gap: "10px" }}>
+          <button
+            onClick={() => setShowGuide(true)}
+            style={{
+              background: theme.card,
+              border: `1px solid ${theme.border}`,
+              padding: "10px",
+              borderRadius: "50%",
+              color: theme.primary,
+              cursor: "pointer",
+              boxShadow: theme.shadow,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "0.2s",
+            }}
+            title="系統使用教學"
+          >
+            <HelpCircle size={20} />
+          </button>
+          <button
+            onClick={toggleTheme}
+            style={{
+              background: theme.card,
+              border: `1px solid ${theme.border}`,
+              padding: "10px",
+              borderRadius: "50%",
+              color: theme.textMain,
+              cursor: "pointer",
+              boxShadow: theme.shadow,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "0.2s",
+            }}
+            title="切換深淺色模式"
+          >
+            <Sun size={20} />
+          </button>
+        </div>
         <div style={{ ...solidCardStyle, width: "100%", maxWidth: "360px", textAlign: "center" }}>
           <h1
             style={{
@@ -435,6 +461,13 @@ export default function AdminPage() {
             </button>
           </div>
         </div>
+        <TeacherGuideModal
+          isOpen={showGuide}
+          onClose={() => setShowGuide(false)}
+          theme={theme}
+          isDarkMode={isDarkMode}
+          isAdmin={true}
+        />
       </div>
     );
   }
@@ -491,7 +524,26 @@ export default function AdminPage() {
               {isAdmin ? "👑 總管理員" : `協同老師 (授課 ${permissions.assignedStudents.length} 位學生)`}
             </span>
           </div>
-          <div style={{ display: "flex", gap: "10px" }}>
+          <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+            <button
+              onClick={() => setShowGuide(true)}
+              style={{
+                background: theme.activeControl,
+                border: `1px solid ${theme.border}`,
+                padding: "10px",
+                borderRadius: "50%",
+                color: theme.primary,
+                cursor: "pointer",
+                boxShadow: theme.shadow,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "0.2s",
+              }}
+              title="系統使用教學"
+            >
+              <HelpCircle size={18} />
+            </button>
             <button
               onClick={toggleTheme}
               style={{
@@ -502,7 +554,11 @@ export default function AdminPage() {
                 color: theme.textMain,
                 cursor: "pointer",
                 boxShadow: theme.shadow,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
               }}
+              title="切換深淺色模式"
             >
               <Sun size={18} />
             </button>
@@ -915,6 +971,8 @@ export default function AdminPage() {
                     theme={theme}
                     isDarkMode={isDarkMode}
                     selectedName={selectedName}
+                    studentList={studentList}
+                    currentTeacherName={currentTeacher?.name || ""}
                   />
                 )}
 
@@ -1023,6 +1081,13 @@ export default function AdminPage() {
           </button>
         )}
       </div>
+      <TeacherGuideModal
+        isOpen={showGuide}
+        onClose={() => setShowGuide(false)}
+        theme={theme}
+        isDarkMode={isDarkMode}
+        isAdmin={isAdmin}
+      />
       <style jsx>{`
         @keyframes fadeIn {
           from {
