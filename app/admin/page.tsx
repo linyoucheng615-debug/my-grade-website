@@ -968,6 +968,7 @@ export default function AdminPage() {
 
                 {selectedFeature === "tuition" && (
                   <TuitionSection
+                    isMobile={isMobile}
                     theme={theme}
                     isDarkMode={isDarkMode}
                     selectedName={selectedName}
@@ -985,7 +986,11 @@ export default function AdminPage() {
                 )}
 
                 {selectedFeature === "planner" && (
-                  <CoursePlannerSection theme={theme} selectedName={selectedName} />
+                  <CoursePlannerSection
+                    isMobile={isMobile}
+                    theme={theme}
+                    selectedName={selectedName}
+                  />
                 )}
               </div>
             )}

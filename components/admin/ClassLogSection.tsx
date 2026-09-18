@@ -181,12 +181,12 @@ export function ClassLogSection({
             ))}
           </select>
 
-          <div style={{ display: "flex", gap: "8px" }}>
+          <div style={{ display: "flex", gap: "8px", minWidth: 0 }}>
             <input
               type="date"
               value={classDate}
               onChange={(e) => setClassDate(e.target.value)}
-              style={{ ...inputStyle, margin: 0, flex: 1 }}
+              style={{ ...inputStyle, margin: 0, flex: 1, minWidth: 0 }}
             />
             <button
               type="button"
@@ -197,10 +197,11 @@ export function ClassLogSection({
                 border: `1px solid ${theme.border}`,
                 borderRadius: "10px",
                 cursor: "pointer",
-                fontSize: "13px",
+                fontSize: "12px",
                 fontWeight: "bold",
-                padding: "0 12px",
+                padding: "0 10px",
                 whiteSpace: "nowrap",
+                flexShrink: 0,
               }}
             >
               今天
@@ -214,10 +215,11 @@ export function ClassLogSection({
                 border: `1px solid ${theme.border}`,
                 borderRadius: "10px",
                 cursor: "pointer",
-                fontSize: "13px",
+                fontSize: "12px",
                 fontWeight: "bold",
-                padding: "0 12px",
+                padding: "0 10px",
                 whiteSpace: "nowrap",
+                flexShrink: 0,
               }}
             >
               昨天

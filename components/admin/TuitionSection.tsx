@@ -10,6 +10,7 @@ import type { AdminTheme } from "./adminTheme";
 import { getCommonStyles } from "./adminTheme";
 
 interface TuitionSectionProps {
+  isMobile?: boolean;
   theme: AdminTheme;
   isDarkMode: boolean;
   selectedName: string;
@@ -18,6 +19,7 @@ interface TuitionSectionProps {
 }
 
 export function TuitionSection({
+  isMobile,
   theme,
   isDarkMode,
   selectedName,
@@ -26,6 +28,14 @@ export function TuitionSection({
 }: TuitionSectionProps) {
   const { showToast } = useToast();
   const { solidCardStyle, inputStyle, selectStyle, btnStyle } = getCommonStyles(theme);
+
+  const [isMobileView, setIsMobileView] = useState<boolean>(isMobile ?? false);
+  useEffect(() => {
+    const checkMobile = () => setIsMobileView(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   const [loading, setLoading] = useState(false);
   const [tuitionMonth, setTuitionMonth] = useState(getCurrentMonthString());
@@ -342,9 +352,10 @@ export function TuitionSection({
                   style={{
                     ...selectStyle,
                     margin: 0,
-                    width: "auto",
-                    minWidth: "160px",
+                    width: isMobileView ? "100%" : "auto",
+                    minWidth: isMobileView ? "100%" : "160px",
                     fontWeight: "bold",
+                    boxSizing: "border-box",
                   }}
                 >
                   {candidateSecondStudents.map((s) => (
@@ -358,8 +369,15 @@ export function TuitionSection({
           )}
         </div>
 
-        {/* 月份與科目選擇與操作按鈕 */}
-        <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+        {/* 月份與科目選擇與操作按鈕（手機版採用俐落 2x2 對稱網格） */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: isMobileView ? "1fr 1fr" : "auto auto auto auto",
+            gap: "10px",
+            alignItems: "center",
+          }}
+        >
           <input
             type="month"
             value={tuitionMonth}
@@ -369,7 +387,13 @@ export function TuitionSection({
               setStudent2Details([]);
               setBillingText("");
             }}
-            style={{ ...inputStyle, width: "auto", flex: 1, minWidth: "140px", margin: 0 }}
+            style={{
+              ...inputStyle,
+              width: "100%",
+              margin: 0,
+              boxSizing: "border-box",
+              padding: isMobileView ? "10px 12px" : "12px 14px",
+            }}
           />
           <select
             value={tuitionSubject}
@@ -381,10 +405,11 @@ export function TuitionSection({
             }}
             style={{
               ...selectStyle,
-              width: "auto",
-              minWidth: "130px",
+              width: "100%",
               margin: 0,
               fontWeight: "bold",
+              boxSizing: "border-box",
+              padding: isMobileView ? "10px 12px" : "12px 14px",
             }}
           >
             <option value="ALL">📚 全部科目</option>
@@ -399,10 +424,12 @@ export function TuitionSection({
             disabled={loading}
             style={{
               ...btnStyle(theme.danger),
-              width: "auto",
+              width: "100%",
               marginTop: 0,
-              padding: "12px 24px",
+              padding: isMobileView ? "11px 12px" : "12px 24px",
               whiteSpace: "nowrap",
+              fontSize: isMobileView ? "13px" : "14px",
+              boxSizing: "border-box",
             }}
           >
             {loading ? "計算中..." : isCombinedMode ? "核算雙人學費" : "核算學費"}
@@ -411,16 +438,19 @@ export function TuitionSection({
             onClick={generateBillingText}
             style={{
               ...btnStyle("#6366f1"),
-              width: "auto",
+              width: "100%",
               marginTop: 0,
-              padding: "12px 24px",
+              padding: isMobileView ? "11px 12px" : "12px 24px",
               display: "flex",
+              justifyContent: "center",
               alignItems: "center",
-              gap: "8px",
+              gap: "6px",
               whiteSpace: "nowrap",
+              fontSize: isMobileView ? "13px" : "14px",
+              boxSizing: "border-box",
             }}
           >
-            <FileText size={18} /> 生成複製明細
+            <FileText size={16} /> 生成複製明細
           </button>
         </div>
 
@@ -466,19 +496,50 @@ export function TuitionSection({
           </div>
         </div>
 
-        {/* 請款文案預覽與複製區塊 */}
+        {/* 請款文案預覽與複製區塊（複製按鈕置於上方，絕不覆蓋文字） */}
         {billingText && (
-          <div style={{ marginTop: "25px", position: "relative", animation: "fadeIn 0.3s ease" }}>
-            <label style={{ fontWeight: "bold", color: "#6366f1", marginBottom: "8px", display: "block" }}>
-              👇 點擊右側按鈕一鍵複製文字傳給家長：
-            </label>
+          <div style={{ marginTop: "25px", animation: "fadeIn 0.3s ease" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "10px",
+                flexWrap: "wrap",
+                gap: "8px",
+              }}
+            >
+              <label style={{ fontWeight: "bold", color: "#6366f1", margin: 0, fontSize: "14px" }}>
+                📋 請款文字預覽（點擊複製）：
+              </label>
+              <button
+                onClick={copyToClipboard}
+                style={{
+                  background: isCopied ? theme.success : "#6366f1",
+                  color: "white",
+                  border: "none",
+                  padding: "8px 16px",
+                  borderRadius: "10px",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  fontSize: "13px",
+                  fontWeight: "bold",
+                  transition: "0.2s",
+                  boxShadow: theme.shadow,
+                }}
+              >
+                {isCopied ? <Check size={15} /> : <Copy size={15} />} {isCopied ? "已複製明細" : "一鍵複製文字"}
+              </button>
+            </div>
             <textarea
               value={billingText}
               onChange={(e) => setBillingText(e.target.value)}
               style={{
                 width: "100%",
                 height: isCombinedMode ? "280px" : "220px",
-                padding: "18px",
+                padding: "14px 16px",
                 borderRadius: "16px",
                 border: `2px solid ${isDarkMode ? "#4338ca" : "#6366f1"}`,
                 fontSize: "14px",
@@ -490,28 +551,6 @@ export function TuitionSection({
                 boxSizing: "border-box",
               }}
             />
-            <button
-              onClick={copyToClipboard}
-              style={{
-                position: "absolute",
-                top: "40px",
-                right: "12px",
-                background: isCopied ? theme.success : theme.card,
-                color: isCopied ? "white" : theme.textMain,
-                border: `1px solid ${theme.border}`,
-                padding: "8px 16px",
-                borderRadius: "8px",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-                fontSize: "13px",
-                transition: "0.2s",
-                boxShadow: theme.shadow,
-              }}
-            >
-              {isCopied ? <Check size={14} /> : <Copy size={14} />} {isCopied ? "已複製" : "複製文字"}
-            </button>
           </div>
         )}
 
@@ -569,16 +608,16 @@ export function TuitionSection({
             <div
               style={{
                 textAlign: "right",
-                fontSize: "24px",
+                fontSize: isMobileView ? "18px" : "22px",
                 fontWeight: "900",
                 marginTop: "20px",
                 color: theme.danger,
                 borderTop: `2px solid ${theme.border}`,
                 paddingTop: "15px",
+                wordBreak: "break-word",
               }}
             >
-              本月學費總計：$
-              {s1Total.toLocaleString()} 元 ({s1Hours} hr)
+              本月學費總計：${s1Total.toLocaleString()} 元 ({s1Hours} hr)
             </div>
           </div>
         )}
@@ -702,12 +741,13 @@ export function TuitionSection({
             <div
               style={{
                 textAlign: "right",
-                fontSize: "24px",
+                fontSize: isMobileView ? "17px" : "22px",
                 fontWeight: "900",
                 marginTop: "20px",
                 color: theme.danger,
                 borderTop: `2px solid ${theme.border}`,
                 paddingTop: "15px",
+                wordBreak: "break-word",
               }}
             >
               兩位學生合計總學費：${(s1Total + s2Total).toLocaleString()} 元 (共 {s1Hours + s2Hours} hr)
@@ -726,7 +766,9 @@ export function TuitionSection({
             marginBottom: "20px",
           }}
         >
-          <h3 style={{ color: theme.textMain, margin: 0 }}>⚙️ 客製化各學科時薪設定 ({selectedName})</h3>
+          <h3 style={{ color: theme.textMain, margin: 0, fontSize: isMobileView ? "16px" : "18px" }}>
+            ⚙️ 客製化各學科時薪設定 ({selectedName})
+          </h3>
           <button
             onClick={handleSaveAllRates}
             disabled={loading}
@@ -739,6 +781,8 @@ export function TuitionSection({
               fontWeight: "bold",
               cursor: "pointer",
               transition: "0.2s",
+              whiteSpace: "nowrap",
+              fontSize: isMobileView ? "12px" : "14px",
             }}
           >
             💾 儲存時薪設定
@@ -747,8 +791,8 @@ export function TuitionSection({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-            gap: "12px",
+            gridTemplateColumns: isMobileView ? "repeat(2, 1fr)" : "repeat(auto-fit, minmax(150px, 1fr))",
+            gap: isMobileView ? "8px" : "12px",
           }}
         >
           {SUBJECTS.map((sub) => (

@@ -8,16 +8,26 @@ import type { AdminTheme } from "./adminTheme";
 import { getCommonStyles } from "./adminTheme";
 
 interface CoursePlannerSectionProps {
+  isMobile?: boolean;
   theme: AdminTheme;
   selectedName: string;
 }
 
 export function CoursePlannerSection({
+  isMobile,
   theme,
   selectedName,
 }: CoursePlannerSectionProps) {
   const { showToast } = useToast();
   const { solidCardStyle, inputStyle, selectStyle, btnStyle } = getCommonStyles(theme);
+
+  const [isMobileView, setIsMobileView] = useState<boolean>(isMobile ?? false);
+  useEffect(() => {
+    const checkMobile = () => setIsMobileView(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   const [plannerSubject, setPlannerSubject] = useState<string>("數學");
   const [plannerRows, setPlannerRows] = useState<any[]>([]);
@@ -214,14 +224,21 @@ export function CoursePlannerSection({
         style={{
           display: "flex",
           justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
+          alignItems: isMobileView ? "stretch" : "center",
+          flexDirection: isMobileView ? "column" : "row",
           gap: "15px",
           marginBottom: "20px",
         }}
       >
         <div>
-          <h3 style={{ color: theme.textMain, margin: "0 0 6px 0", fontWeight: "900" }}>
+          <h3
+            style={{
+              color: theme.textMain,
+              margin: "0 0 6px 0",
+              fontWeight: "900",
+              fontSize: isMobileView ? "18px" : "20px",
+            }}
+          >
             📅 {selectedName} - 段考進度規劃
           </h3>
           <span
@@ -232,16 +249,31 @@ export function CoursePlannerSection({
               padding: "4px 10px",
               borderRadius: "8px",
               fontWeight: "bold",
+              display: "inline-block",
             }}
           >
             🎯 目標：{plannerTargetExam} (共 {plannerRows.length} 堂課)
           </span>
         </div>
-        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: "10px",
+            alignItems: "center",
+            width: isMobileView ? "100%" : "auto",
+          }}
+        >
           <select
             value={plannerSubject}
             onChange={(e) => setPlannerSubject(e.target.value)}
-            style={{ ...selectStyle, width: "auto", margin: 0, padding: "8px 12px" }}
+            style={{
+              ...selectStyle,
+              flex: isMobileView ? 1 : "none",
+              width: isMobileView ? "100%" : "auto",
+              margin: 0,
+              padding: "8px 12px",
+              fontWeight: "bold",
+            }}
           >
             {SUBJECTS.map((s) => (
               <option key={s} value={s}>
@@ -254,7 +286,8 @@ export function CoursePlannerSection({
             disabled={plannerLoading}
             style={{
               ...btnStyle(theme.primary),
-              width: "auto",
+              flex: isMobileView ? 1 : "none",
+              width: isMobileView ? "100%" : "auto",
               margin: 0,
               padding: "8px 18px",
               whiteSpace: "nowrap",
@@ -265,36 +298,184 @@ export function CoursePlannerSection({
         </div>
       </div>
 
-      <div style={{ overflowX: "auto" }}>
-        <table
+      {plannerRows.length === 0 ? (
+        <div
           style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            textAlign: "left",
+            textAlign: "center",
+            padding: "35px 20px",
+            color: theme.textMuted,
+            background: theme.inputBg,
+            borderRadius: "14px",
+            border: `1px dashed ${theme.border}`,
             fontSize: "14px",
           }}
         >
-          <thead>
-            <tr style={{ borderBottom: `2px solid ${theme.border}`, color: theme.textMuted }}>
-              <th style={{ padding: "10px", width: "70px" }}>堂數</th>
-              <th style={{ padding: "10px", width: "110px" }}>上課日期</th>
-              <th style={{ padding: "10px" }}>預計進度 (老師安排)</th>
-              <th style={{ padding: "10px" }}>實際進度 (自動比對)</th>
-              <th style={{ padding: "10px", width: "90px" }}>狀態</th>
-            </tr>
-          </thead>
-          <tbody>
-            {plannerRows.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={5}
-                  style={{ textAlign: "center", padding: "30px", color: theme.textMuted }}
+          目前至下次段考前沒有排定任何課堂，請先至「行事曆」排定課表或段考日期 ✨
+        </div>
+      ) : isMobileView ? (
+        /* 手機版：卡片式流暢排版，輸入框滿版好填寫，絕不跑版 */
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          {plannerRows.map((row, idx) => (
+            <div
+              key={idx}
+              style={{
+                background: theme.inputBg,
+                border: `1px solid ${theme.border}`,
+                borderRadius: "14px",
+                padding: "14px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "10px",
+              }}
+            >
+              {/* 卡片標頭：堂數、日期與吻合狀態 */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span
+                    style={{
+                      background: `${theme.primary}20`,
+                      color: theme.primary,
+                      fontSize: "12px",
+                      fontWeight: "900",
+                      padding: "3px 8px",
+                      borderRadius: "8px",
+                    }}
+                  >
+                    第 {row.sessionIndex} 堂
+                  </span>
+                  <span style={{ fontSize: "13px", fontWeight: "bold", color: theme.textMain }}>
+                    📅 {row.date}
+                  </span>
+                </div>
+                <div>
+                  {row.status === "on_track" && (
+                    <span
+                      style={{
+                        color: theme.success,
+                        fontWeight: "bold",
+                        fontSize: "12px",
+                        background: `${theme.success}15`,
+                        padding: "3px 8px",
+                        borderRadius: "6px",
+                      }}
+                    >
+                      🟢 吻合
+                    </span>
+                  )}
+                  {row.status === "modified" && (
+                    <span
+                      style={{
+                        color: "#f59e0b",
+                        fontWeight: "bold",
+                        fontSize: "12px",
+                        background: "rgba(245,158,11,0.15)",
+                        padding: "3px 8px",
+                        borderRadius: "6px",
+                      }}
+                    >
+                      🟡 微調
+                    </span>
+                  )}
+                  {row.status === "pending" && (
+                    <span
+                      style={{
+                        color: theme.textMuted,
+                        fontSize: "12px",
+                        background: theme.card,
+                        padding: "3px 8px",
+                        borderRadius: "6px",
+                      }}
+                    >
+                      ⏳ 待上課
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* 預計進度輸入框 */}
+              <div>
+                <label
+                  style={{
+                    fontSize: "12px",
+                    color: theme.textMuted,
+                    marginBottom: "5px",
+                    display: "block",
+                    fontWeight: "bold",
+                  }}
                 >
-                  目前至下次段考前沒有排定任何課堂，請先至「行事曆」排定課表或段考日期 ✨
-                </td>
+                  預計進度（老師安排）：
+                </label>
+                <input
+                  type="text"
+                  value={row.plannedContent}
+                  onChange={(e) => {
+                    const updated = [...plannerRows];
+                    updated[idx].plannedContent = e.target.value;
+                    setPlannerRows(updated);
+                  }}
+                  placeholder="例：1-1 數列與極限"
+                  style={{
+                    ...inputStyle,
+                    width: "100%",
+                    margin: 0,
+                    padding: "10px 12px",
+                    fontSize: "14px",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+
+              {/* 實際進度比對 */}
+              <div
+                style={{
+                  fontSize: "12px",
+                  color: theme.textMuted,
+                  background: theme.card,
+                  padding: "8px 12px",
+                  borderRadius: "10px",
+                  border: `1px solid ${theme.border}`,
+                  display: "flex",
+                  gap: "6px",
+                  alignItems: "flex-start",
+                }}
+              >
+                <span style={{ fontWeight: "bold", whiteSpace: "nowrap" }}>實際進度：</span>
+                <span
+                  style={{
+                    color: row.actualContent ? theme.textMain : theme.textMuted,
+                    fontStyle: row.actualContent ? "normal" : "italic",
+                    wordBreak: "break-word",
+                  }}
+                >
+                  {row.actualContent || "(尚未登記日誌)"}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        /* 電腦版：經典表格，設置 minWidth 確保橫向捲動安全 */
+        <div style={{ overflowX: "auto" }}>
+          <table
+            style={{
+              width: "100%",
+              minWidth: "680px",
+              borderCollapse: "collapse",
+              textAlign: "left",
+              fontSize: "14px",
+            }}
+          >
+            <thead>
+              <tr style={{ borderBottom: `2px solid ${theme.border}`, color: theme.textMuted }}>
+                <th style={{ padding: "10px", width: "80px" }}>堂數</th>
+                <th style={{ padding: "10px", width: "120px" }}>上課日期</th>
+                <th style={{ padding: "10px" }}>預計進度 (老師安排)</th>
+                <th style={{ padding: "10px" }}>實際進度 (自動比對)</th>
+                <th style={{ padding: "10px", width: "90px" }}>狀態</th>
               </tr>
-            ) : (
-              plannerRows.map((row, idx) => (
+            </thead>
+            <tbody>
+              {plannerRows.map((row, idx) => (
                 <tr key={idx} style={{ borderBottom: `1px solid ${theme.border}` }}>
                   <td style={{ padding: "12px 10px", fontWeight: "bold", color: theme.textMain }}>
                     第 {row.sessionIndex} 堂
@@ -310,7 +491,13 @@ export function CoursePlannerSection({
                         setPlannerRows(updated);
                       }}
                       placeholder="例：1-1 數列與極限"
-                      style={{ ...inputStyle, margin: 0, padding: "8px 12px" }}
+                      style={{
+                        ...inputStyle,
+                        margin: 0,
+                        padding: "8px 12px",
+                        width: "100%",
+                        boxSizing: "border-box",
+                      }}
                     />
                   </td>
                   <td
@@ -334,11 +521,11 @@ export function CoursePlannerSection({
                     )}
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

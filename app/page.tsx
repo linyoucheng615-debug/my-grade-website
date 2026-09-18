@@ -556,10 +556,10 @@ export default function StudentPortal() {
                                               第 {idx + 1} 堂
                                           </div>
                                           <div style={{ minWidth: 0, flex: 1 }}>
-                                              <div style={{ fontSize: "14px", fontWeight: "bold", color: theme.textMain, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                              <div style={{ fontSize: "14px", fontWeight: "bold", color: theme.textMain, wordBreak: "break-word", lineHeight: "1.4" }}>
                                                   {plan.planned_content || "（老師尚未排定章節）"}
                                               </div>
-                                              <div style={{ fontSize: "11px", color: theme.textMuted, marginTop: "2px" }}>
+                                              <div style={{ fontSize: "11px", color: theme.textMuted, marginTop: "3px" }}>
                                                   📅 {plan.planned_date} {isToday ? "• 今日" : isPast ? "• 已完成" : ""}
                                               </div>
                                           </div>
