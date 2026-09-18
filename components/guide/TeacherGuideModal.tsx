@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState } from "react";
@@ -265,6 +266,12 @@ export function TeacherGuideModal({
                   </div>
                 </div>
                 <div style={{ background: cardBg, padding: "14px", borderRadius: "14px", border: `1px solid ${borderColor}` }}>
+                  <div style={{ fontWeight: "bold", fontSize: "14px" }}>📚 依授課科目單獨或全部核算</div>
+                  <div style={{ fontSize: "13px", color: textMuted, marginTop: "4px" }}>
+                    當學生不同科目由不同老師任教時，可自由選擇「全部科目」或單獨選擇特定科目（如國文、數學）進行精確結算，請款文案亦會自動標註科目名稱！
+                  </div>
+                </div>
+                <div style={{ background: cardBg, padding: "14px", borderRadius: "14px", border: `1px solid ${borderColor}` }}>
                   <div style={{ fontWeight: "bold", fontSize: "14px" }}>👥 雙學生合併結算（兄弟姊妹 / 同家長）</div>
                   <div style={{ fontSize: "13px", color: textMuted, marginTop: "4px" }}>
                     勾選「合併第二位學生結算」並挑選第二位學生，點擊「核算雙人學費」即可同時計算兩位學生的堂數與費用，並產出合併合計總金額與詳細條列文案。
@@ -273,7 +280,7 @@ export function TeacherGuideModal({
                 <div style={{ background: cardBg, padding: "14px", borderRadius: "14px", border: `1px solid ${borderColor}` }}>
                   <div style={{ fontWeight: "bold", fontSize: "14px" }}>📋 一鍵複製請款文字</div>
                   <div style={{ fontSize: "13px", color: textMuted, marginTop: "4px" }}>
-                    點擊「生成複製明細」後，可點擊「複製文字」直接將排版好的請款通知貼到 LINE 傳給家長，省時又專業。
+                    點擊「生成複製明細」後，可點擊「複製文字」直接將排版好的請款通知貼到 LINE 傳給家長，稱謂貼心使用「家長」，省時又專業。
                   </div>
                 </div>
               </div>

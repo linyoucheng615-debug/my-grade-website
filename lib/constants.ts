@@ -24,7 +24,7 @@ export const SUBJECT_COLORS: Record<string, string> = {
   "公民": "#f97316",
 };
 
-export const BANK_ACCOUNT = "（822） 129541918532";
+export const BANK_ACCOUNT = "";
 
 export const WEEK_DAYS = ["日", "一", "二", "三", "四", "五", "六"] as const;
 
