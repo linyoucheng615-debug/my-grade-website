@@ -24,6 +24,7 @@ interface CalendarSectionProps {
   studentList: any[];
   calendarEvents: any[];
   onRefreshCalendar: () => void;
+  isAdmin?: boolean;
 }
 
 export function CalendarSection({
@@ -33,6 +34,7 @@ export function CalendarSection({
   studentList,
   calendarEvents,
   onRefreshCalendar,
+  isAdmin = true,
 }: CalendarSectionProps) {
   const { showToast } = useToast();
   const { solidCardStyle, inputStyle, btnStyle } = getCommonStyles(theme);
@@ -42,15 +44,22 @@ export function CalendarSection({
   const [confirmEvId, setConfirmEvId] = useState<number | null>(null);
 
   // Form states
+  const defaultEvStudent = isAdmin ? "全體" : (studentList[0]?.name || "");
   const [evDate, setEvDate] = useState<string>(getTodayDateString());
   const [evEndDate, setEvEndDate] = useState<string>(getTodayDateString());
   const [evTitle, setEvTitle] = useState<string>("");
   const [evType, setEvType] = useState<string>("class");
-  const [evStudent, setEvStudent] = useState<string>("全體");
+  const [evStudent, setEvStudent] = useState<string>(defaultEvStudent);
   const [evIsRecurring, setEvIsRecurring] = useState<boolean>(false);
   const [evRecurringEndDate, setEvRecurringEndDate] = useState<string>(getTodayDateString());
   const [evStartTime, setEvStartTime] = useState<string>("18:30");
   const [evEndTime, setEvEndTime] = useState<string>("20:30");
+
+  React.useEffect(() => {
+    if (!isAdmin && evStudent === "全體" && studentList.length > 0) {
+      setEvStudent(studentList[0].name);
+    }
+  }, [isAdmin, studentList, evStudent]);
 
   // Calendar navigation
   const [calYear, setCalYear] = useState<number>(new Date().getFullYear());
@@ -68,7 +77,7 @@ export function CalendarSection({
     setEvEndDate(getTodayDateString());
     setEvTitle("");
     setEvType("class");
-    setEvStudent("全體");
+    setEvStudent(isAdmin ? "全體" : (studentList[0]?.name || ""));
     setEvIsRecurring(false);
     setEvRecurringEndDate(getTodayDateString());
     setEvStartTime("18:30");
@@ -388,7 +397,7 @@ export function CalendarSection({
             <option value="activity">🎈 其他活動安排</option>
           </select>
           <select value={evStudent} onChange={(e) => setEvStudent(e.target.value)} style={inputStyle}>
-            <option value="全體">指定對象：全體學生</option>
+            {isAdmin && <option value="全體">指定對象：全體學生</option>}
             {studentList.map((s) => (
               <option key={s.id} value={s.name}>
                 指定對象：{s.name}

@@ -22,6 +22,8 @@ import { toDateKey } from "@/lib/dateUtils";
 import { useToast } from "@/components/ui/Toast";
 import { getAdminTheme, getCommonStyles } from "@/components/admin/adminTheme";
 
+import { parseTeacherPermissions, type ParsedTeacherPermissions } from "@/lib/teacherUtils";
+
 // 子模組匯入
 import { TodayDashboard } from "@/components/admin/TodayDashboard";
 import { ClassLogSection } from "@/components/admin/ClassLogSection";
@@ -40,6 +42,12 @@ export default function AdminPage() {
   // 鑑權與全域狀態
   const [currentTeacher, setCurrentTeacher] = useState<any>(() => {
     if (typeof window !== "undefined") {
+      const savedData = localStorage.getItem("teacherData");
+      if (savedData) {
+        try {
+          return JSON.parse(savedData);
+        } catch {}
+      }
       const saved = localStorage.getItem("teacherName");
       return saved ? { name: saved } : null;
     }
@@ -55,6 +63,10 @@ export default function AdminPage() {
     return false;
   });
   const [isMobile, setIsMobile] = useState(false);
+
+  // 解析目前老師的權限（是否為總管理員、負責的學生名單）
+  const permissions = parseTeacherPermissions(currentTeacher);
+  const isAdmin = permissions.isAdmin;
 
   // 導覽狀態
   const [mainTab, setMainTab] = useState<"features" | "settings">("features");
@@ -80,34 +92,87 @@ export default function AdminPage() {
     localStorage.setItem("teacherTheme", nextTheme ? "dark" : "light");
   };
 
-  // 取得學生列表
-  const fetchStudents = async () => {
-    const { data } = await supabase.from("students").select("*").order("name");
-    const list = data || [];
-    setStudentList(list);
-    if (list.length > 0 && !selectedName) {
-      setSelectedName(list[0].name);
+  // 自動同步最新的老師權限設定
+  useEffect(() => {
+    const syncTeacherInfo = async () => {
+      if (!currentTeacher?.name) return;
+      const { data } = await supabase
+        .from("teachers")
+        .select("*")
+        .eq("name", currentTeacher.name)
+        .single();
+      if (data) {
+        setCurrentTeacher(data);
+        localStorage.setItem("teacherData", JSON.stringify(data));
+      }
+    };
+    syncTeacherInfo();
+  }, [currentTeacher?.name]);
+
+  // 若非管理員且當前在設定頁面，強制切換至核心功能
+  useEffect(() => {
+    if (!isAdmin && mainTab === "settings") {
+      setMainTab("features");
     }
+  }, [isAdmin, mainTab]);
+
+  // 取得學生列表（協同老師僅載入所指派的學生）
+  const fetchStudents = async (customPerms?: ParsedTeacherPermissions) => {
+    const perms = customPerms || parseTeacherPermissions(currentTeacher);
+    const { data } = await supabase.from("students").select("*").order("name");
+    const all = data || [];
+    const filtered = perms.isAdmin
+      ? all
+      : all.filter((s) => perms.assignedStudents.includes(s.name));
+    setStudentList(filtered);
+    setSelectedName((prev) => {
+      if (filtered.length === 0) return "";
+      if (filtered.some((s) => s.name === prev)) return prev;
+      return filtered[0].name;
+    });
   };
 
-  // 取得行事曆事件
-  const fetchCalendar = async () => {
+  // 取得行事曆事件（協同老師僅載入全體及負責學生之事件）
+  const fetchCalendar = async (customPerms?: ParsedTeacherPermissions) => {
+    const perms = customPerms || parseTeacherPermissions(currentTeacher);
     const { data } = await supabase
       .from("calendar_events")
       .select("*")
       .order("event_date", { ascending: true });
-    setCalendarEvents(data || []);
+    const all = data || [];
+    if (!perms.isAdmin) {
+      const filtered = all.filter(
+        (ev) =>
+          ev.student_name === "全體" ||
+          !ev.student_name ||
+          perms.assignedStudents.includes(ev.student_name)
+      );
+      setCalendarEvents(filtered);
+    } else {
+      setCalendarEvents(all);
+    }
   };
 
-  // 載入 Dashboard 預警與核銷通知
+  // 載入 Dashboard 預警與核銷通知（依權限隔離學生）
   const fetchDashboardData = async () => {
+    if (!currentTeacher) return;
     setLoading(true);
-    const { data: grades } = await supabase
+    const perms = parseTeacherPermissions(currentTeacher);
+
+    let gradesQuery = supabase
       .from("grades")
       .select("*")
       .lt("score", 60)
-      .order("exam_date", { ascending: false })
-      .limit(5);
+      .order("exam_date", { ascending: false });
+
+    if (!perms.isAdmin) {
+      if (perms.assignedStudents.length > 0) {
+        gradesQuery = gradesQuery.in("student_name", perms.assignedStudents);
+      } else {
+        gradesQuery = gradesQuery.in("student_name", ["__NONE__"]);
+      }
+    }
+    const { data: grades } = await gradesQuery.limit(5);
     setDashboardLowGrades(grades || []);
 
     const today = new Date();
@@ -118,10 +183,20 @@ export default function AdminPage() {
       return toDateKey(d);
     });
 
-    const { data: recentLogs } = await supabase
+    let logsQuery = supabase
       .from("class_logs")
       .select("*")
       .in("class_date", past7Days);
+
+    if (!perms.isAdmin) {
+      if (perms.assignedStudents.length > 0) {
+        logsQuery = logsQuery.in("student_name", perms.assignedStudents);
+      } else {
+        logsQuery = logsQuery.in("student_name", ["__NONE__"]);
+      }
+    }
+
+    const { data: recentLogs } = await logsQuery;
     const logsMap = new Set((recentLogs || []).map((l) => `${l.student_name}_${l.class_date}`));
 
     past7Days.forEach((dateStr) => {
@@ -153,12 +228,20 @@ export default function AdminPage() {
     });
     setDashboardMissingLogs(missing);
 
-    const { data: redeems } = await supabase
+    let redeemsQuery = supabase
       .from("student_inventory")
       .select("*")
       .eq("status", "used")
-      .order("used_at", { ascending: false })
-      .limit(5);
+      .order("used_at", { ascending: false });
+
+    if (!perms.isAdmin) {
+      if (perms.assignedStudents.length > 0) {
+        redeemsQuery = redeemsQuery.in("student_name", perms.assignedStudents);
+      } else {
+        redeemsQuery = redeemsQuery.in("student_name", ["__NONE__"]);
+      }
+    }
+    const { data: redeems } = await redeemsQuery.limit(5);
     setRecentRedeems(redeems || []);
 
     setLoading(false);
@@ -172,7 +255,7 @@ export default function AdminPage() {
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, []);
+  }, [currentTeacher]);
 
   useEffect(() => {
     if (selectedFeature === "dashboard" && currentTeacher) {
@@ -194,6 +277,10 @@ export default function AdminPage() {
     if (data) {
       setCurrentTeacher(data);
       localStorage.setItem("teacherName", data.name);
+      localStorage.setItem("teacherData", JSON.stringify(data));
+      const perms = parseTeacherPermissions(data);
+      fetchStudents(perms);
+      fetchCalendar(perms);
       showToast(`👋 歡迎回來，${data.name} 老師！`, "success");
     } else {
       showToast("❌ 帳號或密碼錯誤，登入失敗", "error");
@@ -202,7 +289,10 @@ export default function AdminPage() {
 
   const handleLogout = () => {
     localStorage.removeItem("teacherName");
+    localStorage.removeItem("teacherData");
     setCurrentTeacher(null);
+    setMainTab("features");
+    setSelectedFeature(null);
     showToast("已安全登出", "info");
   };
 
@@ -383,9 +473,24 @@ export default function AdminPage() {
             marginBottom: "30px",
           }}
         >
-          <h1 style={{ fontSize: "24px", color: theme.textMain, fontWeight: "900" }}>
-            👩‍🏫 {currentTeacher.name} 的管理後台
-          </h1>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+            <h1 style={{ fontSize: "24px", color: theme.textMain, fontWeight: "900", margin: 0 }}>
+              👩‍🏫 {currentTeacher.name} 的管理後台
+            </h1>
+            <span
+              style={{
+                fontSize: "12px",
+                fontWeight: "bold",
+                padding: "3px 10px",
+                borderRadius: "20px",
+                background: isAdmin ? `${theme.primary}20` : `#10b98120`,
+                color: isAdmin ? theme.primary : "#10b981",
+                border: `1px solid ${isAdmin ? theme.primary : "#10b981"}50`,
+              }}
+            >
+              {isAdmin ? "👑 總管理員" : `協同老師 (授課 ${permissions.assignedStudents.length} 位學生)`}
+            </span>
+          </div>
           <div style={{ display: "flex", gap: "10px" }}>
             <button
               onClick={toggleTheme}
@@ -541,30 +646,32 @@ export default function AdminPage() {
                     </div>
                   </div>
 
-                  <div
-                    onClick={() => setSelectedFeature("reward")}
-                    style={{
-                      ...solidCardStyle,
-                      cursor: "pointer",
-                      borderLeft: `6px solid #14b8a6`,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "15px",
-                      marginBottom: 0,
-                    }}
-                  >
-                    <div style={{ background: "#14b8a620", padding: "12px", borderRadius: "12px" }}>
-                      <ShoppingBag size={24} color="#14b8a6" />
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: "900", fontSize: "16px", color: theme.textMain }}>
-                        🎁 點數商品管理
+                  {isAdmin && (
+                    <div
+                      onClick={() => setSelectedFeature("reward")}
+                      style={{
+                        ...solidCardStyle,
+                        cursor: "pointer",
+                        borderLeft: `6px solid #14b8a6`,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "15px",
+                        marginBottom: 0,
+                      }}
+                    >
+                      <div style={{ background: "#14b8a620", padding: "12px", borderRadius: "12px" }}>
+                        <ShoppingBag size={24} color="#14b8a6" />
                       </div>
-                      <div style={{ fontSize: "12px", color: theme.textMuted, marginTop: "4px" }}>
-                        上架兌換獎勵與設定
+                      <div>
+                        <div style={{ fontWeight: "900", fontSize: "16px", color: theme.textMain }}>
+                          🎁 點數商品管理
+                        </div>
+                        <div style={{ fontSize: "12px", color: theme.textMuted, marginTop: "4px" }}>
+                          上架兌換獎勵與設定
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
 
                   <div
                     onClick={() => setSelectedFeature("calendar")}
@@ -709,26 +816,41 @@ export default function AdminPage() {
                     >
                       👤 指定要操作的學生：
                     </label>
-                    <select
-                      value={selectedName}
-                      onChange={(e) => setSelectedName(e.target.value)}
-                      style={{
-                        ...selectStyle,
-                        background: theme.inputBg,
-                        fontSize: "18px",
-                        fontWeight: "bold",
-                        color: theme.textMain,
-                        border: `1px solid ${theme.border}`,
-                        padding: "12px 15px",
-                        margin: 0,
-                      }}
-                    >
-                      {studentList.map((s) => (
-                        <option key={s.id} value={s.name}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
+                    {studentList.length === 0 ? (
+                      <div
+                        style={{
+                          background: `${theme.danger}15`,
+                          color: theme.danger,
+                          padding: "14px 18px",
+                          borderRadius: "12px",
+                          fontSize: "14px",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        ⚠️ 目前尚未指派任何學生給您，請聯繫總管理員為您配置負責學生。
+                      </div>
+                    ) : (
+                      <select
+                        value={selectedName}
+                        onChange={(e) => setSelectedName(e.target.value)}
+                        style={{
+                          ...selectStyle,
+                          background: theme.inputBg,
+                          fontSize: "18px",
+                          fontWeight: "bold",
+                          color: theme.textMain,
+                          border: `1px solid ${theme.border}`,
+                          padding: "12px 15px",
+                          margin: 0,
+                        }}
+                      >
+                        {studentList.map((s) => (
+                          <option key={s.id} value={s.name}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                 )}
 
@@ -784,6 +906,7 @@ export default function AdminPage() {
                     studentList={studentList}
                     calendarEvents={calendarEvents}
                     onRefreshCalendar={fetchCalendar}
+                    isAdmin={isAdmin}
                   />
                 )}
 
@@ -812,7 +935,7 @@ export default function AdminPage() {
         )}
 
         {/* 設定管理分頁 */}
-        {mainTab === "settings" && (
+        {mainTab === "settings" && isAdmin && (
           <StudentSettingsSection
             isMobile={isMobile}
             theme={theme}
@@ -820,6 +943,8 @@ export default function AdminPage() {
             onRefreshStudents={fetchStudents}
             selectedName={selectedName}
             onSelectStudent={setSelectedName}
+            currentTeacherName={currentTeacher?.name || ""}
+            isAdmin={isAdmin}
           />
         )}
       </div>
@@ -870,31 +995,33 @@ export default function AdminPage() {
             🚀 核心功能
           </span>
         </button>
-        <button
-          onClick={() => setMainTab("settings")}
-          style={{
-            flex: 1,
-            background: "transparent",
-            border: "none",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            color: mainTab === "settings" ? theme.primary : theme.textMuted,
-            cursor: "pointer",
-            transition: "0.2s",
-          }}
-        >
-          <Settings
-            size={26}
+        {isAdmin && (
+          <button
+            onClick={() => setMainTab("settings")}
             style={{
-              marginBottom: "6px",
-              transform: mainTab === "settings" ? "scale(1.1)" : "scale(1)",
+              flex: 1,
+              background: "transparent",
+              border: "none",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              color: mainTab === "settings" ? theme.primary : theme.textMuted,
+              cursor: "pointer",
+              transition: "0.2s",
             }}
-          />
-          <span style={{ fontSize: "12px", fontWeight: mainTab === "settings" ? "bold" : "normal" }}>
-            ⚙️ 設定管理
-          </span>
-        </button>
+          >
+            <Settings
+              size={26}
+              style={{
+                marginBottom: "6px",
+                transform: mainTab === "settings" ? "scale(1.1)" : "scale(1)",
+              }}
+            />
+            <span style={{ fontSize: "12px", fontWeight: mainTab === "settings" ? "bold" : "normal" }}>
+              ⚙️ 設定管理
+            </span>
+          </button>
+        )}
       </div>
       <style jsx>{`
         @keyframes fadeIn {

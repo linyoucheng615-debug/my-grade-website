@@ -11,6 +11,9 @@ export interface Teacher {
   id: number;
   name: string;
   password?: string;
+  role?: string;
+  assigned_students?: string[] | null;
+  is_admin?: boolean;
   created_at?: string;
 }
 

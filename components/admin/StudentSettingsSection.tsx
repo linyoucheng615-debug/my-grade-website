@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { GraduationCap, Lock, Pencil, Trash2, User, UserPlus, Users, X } from "lucide-react";
+import { GraduationCap, Lock, Pencil, ShieldCheck, Trash2, User, UserPlus, Users, X } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { SUBJECTS } from "@/lib/constants";
 import { useToast } from "@/components/ui/Toast";
 import type { AdminTheme } from "./adminTheme";
 import { getCommonStyles } from "./adminTheme";
+import { TeacherManagerSection } from "./TeacherManagerSection";
 
 interface StudentSettingsSectionProps {
   isMobile: boolean;
@@ -15,6 +16,8 @@ interface StudentSettingsSectionProps {
   onRefreshStudents: () => void;
   selectedName: string;
   onSelectStudent: (name: string) => void;
+  currentTeacherName?: string;
+  isAdmin?: boolean;
 }
 
 export function StudentSettingsSection({
@@ -24,11 +27,14 @@ export function StudentSettingsSection({
   onRefreshStudents,
   selectedName,
   onSelectStudent,
+  currentTeacherName = "",
+  isAdmin = true,
 }: StudentSettingsSectionProps) {
   const { showToast } = useToast();
   const { solidCardStyle, inputStyle, selectStyle, btnStyle } = getCommonStyles(theme);
 
   const [loading, setLoading] = useState(false);
+  const [activeSubTab, setActiveSubTab] = useState<"students" | "teachers">("students");
   const [newStudentName, setNewStudentName] = useState("");
   const [newStudentPassword, setNewStudentPassword] = useState("1234");
   const [newStudentSchool, setNewStudentSchool] = useState("");
@@ -153,8 +159,73 @@ export function StudentSettingsSection({
         ⚙️ 系統設定與名單管理
       </h2>
 
-      {/* 註冊 / 編輯學生表單 */}
-      <form onSubmit={handleSaveStudent} style={{ ...solidCardStyle, position: "relative" }}>
+      {isAdmin && (
+        <div
+          style={{
+            display: "flex",
+            gap: "10px",
+            marginBottom: "25px",
+            borderBottom: `1px solid ${theme.border}`,
+            paddingBottom: "12px",
+            overflowX: "auto",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("students")}
+            style={{
+              background: activeSubTab === "students" ? theme.primary : theme.inputBg,
+              color: activeSubTab === "students" ? "#fff" : theme.textMuted,
+              border: `1px solid ${activeSubTab === "students" ? theme.primary : theme.border}`,
+              padding: "10px 18px",
+              borderRadius: "12px",
+              fontWeight: "bold",
+              fontSize: "14px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              transition: "all 0.2s ease",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <User size={18} /> 學生帳號與學費設定
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("teachers")}
+            style={{
+              background: activeSubTab === "teachers" ? theme.primary : theme.inputBg,
+              color: activeSubTab === "teachers" ? "#fff" : theme.textMuted,
+              border: `1px solid ${activeSubTab === "teachers" ? theme.primary : theme.border}`,
+              padding: "10px 18px",
+              borderRadius: "12px",
+              fontWeight: "bold",
+              fontSize: "14px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              transition: "all 0.2s ease",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <ShieldCheck size={18} /> 協同老師帳號與授課指派
+          </button>
+        </div>
+      )}
+
+      {activeSubTab === "teachers" ? (
+        <TeacherManagerSection
+          isMobile={isMobile}
+          theme={theme}
+          allStudents={studentList}
+          currentTeacherName={currentTeacherName}
+        />
+      ) : (
+        <>
+          {/* 註冊 / 編輯學生表單 */}
+          <form onSubmit={handleSaveStudent} style={{ ...solidCardStyle, position: "relative" }}>
         {editingStudentId && (
           <button
             type="button"
@@ -460,6 +531,8 @@ export function StudentSettingsSection({
           ))}
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }
