@@ -2,15 +2,11 @@
 
 import React, { useState } from "react";
 import {
-  Award,
   BookOpen,
-  Calendar,
   CheckCircle2,
   Coins,
-  FileText,
   HelpCircle,
   Home,
-  ShoppingBag,
   Target,
   TrendingUp,
   X,
@@ -59,6 +55,7 @@ export function StudentGuideModal({ isOpen, onClose, isDarkMode }: StudentGuideM
         alignItems: "center",
         justifyContent: "center",
         padding: "16px",
+        boxSizing: "border-box",
         animation: "fadeIn 0.2s ease",
       }}
       onClick={onClose}
@@ -70,23 +67,25 @@ export function StudentGuideModal({ isOpen, onClose, isDarkMode }: StudentGuideM
           borderRadius: "24px",
           width: "100%",
           maxWidth: "680px",
-          maxHeight: "88vh",
+          maxHeight: "85vh",
           display: "flex",
           flexDirection: "column",
           boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.4)",
           border: `1px solid ${borderColor}`,
           overflow: "hidden",
+          boxSizing: "border-box",
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* 頂部標題列 */}
+        {/* 頂部標題列 (固定不被壓縮) */}
         <div
           style={{
-            padding: "20px 24px",
+            padding: "18px 22px",
             borderBottom: `1px solid ${borderColor}`,
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
+            flexShrink: 0,
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -124,16 +123,17 @@ export function StudentGuideModal({ isOpen, onClose, isDarkMode }: StudentGuideM
           </button>
         </div>
 
-        {/* 分頁按鈕區 */}
+        {/* 分頁按鈕區 (固定不被壓縮，支援橫滑) */}
         <div
           style={{
             display: "flex",
             gap: "8px",
-            padding: "12px 20px",
+            padding: "10px 18px",
             background: cardBg,
             borderBottom: `1px solid ${borderColor}`,
             overflowX: "auto",
-            scrollbarWidth: "none",
+            WebkitOverflowScrolling: "touch",
+            flexShrink: 0,
           }}
         >
           {tabs.map((tab) => {
@@ -166,8 +166,18 @@ export function StudentGuideModal({ isOpen, onClose, isDarkMode }: StudentGuideM
           })}
         </div>
 
-        {/* 內容展示區 */}
-        <div style={{ padding: "24px", overflowY: "auto", flex: 1, lineHeight: "1.7" }}>
+        {/* 內容展示區 (彈性縮放，支援滾動，不遮蓋按鈕) */}
+        <div
+          style={{
+            padding: "20px 22px",
+            overflowY: "auto",
+            WebkitOverflowScrolling: "touch",
+            flex: "1 1 auto",
+            minHeight: 0,
+            lineHeight: "1.7",
+            boxSizing: "border-box",
+          }}
+        >
           {activeTab === "quick" && (
             <div>
               <h3 style={{ fontSize: "16px", fontWeight: "bold", color: primaryColor, marginTop: 0 }}>
@@ -298,14 +308,15 @@ export function StudentGuideModal({ isOpen, onClose, isDarkMode }: StudentGuideM
           )}
         </div>
 
-        {/* 底部按鈕 */}
+        {/* 底部按鈕 (固定於底部，絕不被蓋住) */}
         <div
           style={{
-            padding: "16px 24px",
+            padding: "14px 22px",
             borderTop: `1px solid ${borderColor}`,
             display: "flex",
             justifyContent: "flex-end",
             background: cardBg,
+            flexShrink: 0,
           }}
         >
           <button
@@ -329,4 +340,3 @@ export function StudentGuideModal({ isOpen, onClose, isDarkMode }: StudentGuideM
     </div>
   );
 }
-

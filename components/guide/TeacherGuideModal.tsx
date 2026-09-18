@@ -5,14 +5,9 @@ import {
   BookOpen,
   Calendar,
   CheckCircle2,
-  Coins,
   DollarSign,
   HelpCircle,
   Home,
-  ShieldCheck,
-  Target,
-  TrendingUp,
-  Users,
   X,
 } from "lucide-react";
 
@@ -28,9 +23,8 @@ export function TeacherGuideModal({
   isOpen,
   onClose,
   isDarkMode,
-  isAdmin = true,
 }: TeacherGuideModalProps) {
-  const [activeTab, setActiveTab] = useState<"dashboard" | "class" | "tuition" | "calendar" | "permission">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "class" | "tuition" | "calendar">("dashboard");
 
   if (!isOpen) return null;
 
@@ -42,11 +36,10 @@ export function TeacherGuideModal({
   const primaryColor = "#6366f1";
 
   const tabs = [
-    { id: "dashboard", label: "🏠 看板與預警", icon: Home },
+    { id: "dashboard", label: "🏠 今日看板", icon: Home },
     { id: "class", label: "📚 進度與成績", icon: BookOpen },
     { id: "tuition", label: "💰 學費與合併請款", icon: DollarSign },
-    { id: "calendar", label: "📅 排課與段考規劃", icon: Calendar },
-    { id: "permission", label: "👩‍🏫 協同教學與權限", icon: ShieldCheck },
+    { id: "calendar", label: "📅 排課與規劃", icon: Calendar },
   ];
 
   return (
@@ -65,6 +58,7 @@ export function TeacherGuideModal({
         alignItems: "center",
         justifyContent: "center",
         padding: "16px",
+        boxSizing: "border-box",
         animation: "fadeIn 0.2s ease",
       }}
       onClick={onClose}
@@ -75,24 +69,26 @@ export function TeacherGuideModal({
           color: textColor,
           borderRadius: "24px",
           width: "100%",
-          maxWidth: "700px",
-          maxHeight: "88vh",
+          maxWidth: "680px",
+          maxHeight: "85vh",
           display: "flex",
           flexDirection: "column",
           boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.4)",
           border: `1px solid ${borderColor}`,
           overflow: "hidden",
+          boxSizing: "border-box",
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* 頂部標題列 */}
+        {/* 頂部標題列 (固定不被壓縮) */}
         <div
           style={{
-            padding: "20px 24px",
+            padding: "18px 22px",
             borderBottom: `1px solid ${borderColor}`,
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
+            flexShrink: 0,
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -108,10 +104,10 @@ export function TeacherGuideModal({
             </div>
             <div>
               <h2 style={{ fontSize: "18px", fontWeight: "900", margin: 0 }}>
-                👩‍🏫 老師管理控制台使用手冊
+                👩‍🏫 教學平台使用手冊
               </h2>
               <p style={{ fontSize: "12px", color: textMuted, margin: "2px 0 0 0" }}>
-                教務流程、學費結算、排程規劃與權限指南
+                教務流程、紀錄登記與學費結算指南
               </p>
             </div>
           </div>
@@ -130,16 +126,17 @@ export function TeacherGuideModal({
           </button>
         </div>
 
-        {/* 分頁按鈕區 */}
+        {/* 分頁標籤列 (固定不被壓縮，可左右橫滑) */}
         <div
           style={{
             display: "flex",
             gap: "8px",
-            padding: "12px 20px",
+            padding: "10px 18px",
             background: cardBg,
             borderBottom: `1px solid ${borderColor}`,
             overflowX: "auto",
-            scrollbarWidth: "none",
+            WebkitOverflowScrolling: "touch",
+            flexShrink: 0,
           }}
         >
           {tabs.map((tab) => {
@@ -172,15 +169,25 @@ export function TeacherGuideModal({
           })}
         </div>
 
-        {/* 內容展示區 */}
-        <div style={{ padding: "24px", overflowY: "auto", flex: 1, lineHeight: "1.7" }}>
+        {/* 內容展示區 (彈性縮放並提供獨立捲動，避免按鈕被遮蔽) */}
+        <div
+          style={{
+            padding: "20px 22px",
+            overflowY: "auto",
+            WebkitOverflowScrolling: "touch",
+            flex: "1 1 auto",
+            minHeight: 0,
+            lineHeight: "1.7",
+            boxSizing: "border-box",
+          }}
+        >
           {activeTab === "dashboard" && (
             <div>
               <h3 style={{ fontSize: "16px", fontWeight: "bold", color: primaryColor, marginTop: 0 }}>
                 🏠 老師今日看板與智慧預警
               </h3>
               <p style={{ fontSize: "14px", color: textMuted }}>
-                每日登入後的首頁戰情中心，自動彙整今日與近期關鍵事項：
+                每日登入後的首頁戰情中心，自動彙整今日與近期關鍵教學事項：
               </p>
               <div style={{ display: "grid", gap: "12px", marginTop: "16px" }}>
                 <div style={{ background: cardBg, padding: "14px", borderRadius: "14px", border: `1px solid ${borderColor}` }}>
@@ -188,7 +195,7 @@ export function TeacherGuideModal({
                     <CheckCircle2 size={16} color={primaryColor} /> 今日授課課表
                   </div>
                   <div style={{ fontSize: "13px", color: textMuted, marginTop: "4px" }}>
-                    即時呈現今天有哪些學生上課、上課時間與科目，單日停課課程會自動隱藏或變色標註。
+                    即時呈現今天有哪些學生上課、上課時間與科目，單日停課課程會自動變色標註或隱藏。
                   </div>
                 </div>
                 <div style={{ background: cardBg, padding: "14px", borderRadius: "14px", border: `1px solid ${borderColor}` }}>
@@ -196,7 +203,7 @@ export function TeacherGuideModal({
                     <CheckCircle2 size={16} color="#ef4444" /> 過去 7 日未填紀錄提醒
                   </div>
                   <div style={{ fontSize: "13px", color: textMuted, marginTop: "4px" }}>
-                    智慧比對行事曆堂數與上課進度表，若有已上課卻尚未登記進度的課堂，會精確條列提醒您補填。
+                    智慧比對行事曆堂數與上課進度表，若有已上課卻尚未登記進度的課堂，會精確條列提醒您補填紀錄。
                   </div>
                 </div>
                 <div style={{ background: cardBg, padding: "14px", borderRadius: "14px", border: `1px solid ${borderColor}` }}>
@@ -204,7 +211,7 @@ export function TeacherGuideModal({
                     <CheckCircle2 size={16} color="#f59e0b" /> 成績低分預警（&lt;60 分）
                   </div>
                   <div style={{ fontSize: "13px", color: textMuted, marginTop: "4px" }}>
-                    列出負責學生近期不及格之段考/平時測驗，讓老師能第一時間介入關心與補強觀念。
+                    列出負責學生近期不及格之段考/平時測驗，讓老師能第一時間介入關心並加強觀念。
                   </div>
                 </div>
               </div>
@@ -223,7 +230,7 @@ export function TeacherGuideModal({
                 <div style={{ background: cardBg, padding: "14px", borderRadius: "14px", border: `1px solid ${borderColor}` }}>
                   <div style={{ fontWeight: "bold", fontSize: "14px" }}>📖 登記上課進度</div>
                   <div style={{ fontSize: "13px", color: textMuted, marginTop: "4px" }}>
-                    指定學生、科目、上課時數、講義雜費、教學單元筆記與回家作業。前台學生端會即時同步！
+                    填寫上課時數、科目、講義雜費、教學單元筆記與回家作業。前台學生端會即時同步！
                   </div>
                 </div>
                 <div style={{ background: cardBg, padding: "14px", borderRadius: "14px", border: `1px solid ${borderColor}` }}>
@@ -235,7 +242,7 @@ export function TeacherGuideModal({
                 <div style={{ background: cardBg, padding: "14px", borderRadius: "14px", border: `1px solid ${borderColor}` }}>
                   <div style={{ fontWeight: "bold", fontSize: "14px" }}>💎 獎勵點數發放</div>
                   <div style={{ fontSize: "13px", color: textMuted, marginTop: "4px" }}>
-                    課堂表現優異或作業完成度高時可加發點數，激勵學生學習動力。
+                    課堂表現優異或作業認真時可加發點數，激勵學生學習動力。
                   </div>
                 </div>
               </div>
@@ -245,22 +252,22 @@ export function TeacherGuideModal({
           {activeTab === "tuition" && (
             <div>
               <h3 style={{ fontSize: "16px", fontWeight: "bold", color: primaryColor, marginTop: 0 }}>
-                💰 學費月底結算、雙學生合併與受款帳戶
+                💰 學費結算、雙學生合併與個人受款帳號
               </h3>
               <p style={{ fontSize: "14px", color: textMuted }}>
-                每月結算學費超便利，一鍵生成親切文案供傳送給家長：
+                每月結算學費超便利，一鍵生成親切文案供直接複製傳送給家長：
               </p>
               <div style={{ display: "grid", gap: "12px", marginTop: "16px" }}>
                 <div style={{ background: cardBg, padding: "14px", borderRadius: "14px", border: `1px solid ${borderColor}` }}>
                   <div style={{ fontWeight: "bold", fontSize: "14px" }}>🏦 自訂個人匯款受款帳戶</div>
                   <div style={{ fontSize: "13px", color: textMuted, marginTop: "4px" }}>
-                    在學費結算面板可輸入您的銀行受款帳戶（如銀行代碼、帳號與戶名），系統會自動保存。若未填寫則該位置直接留白，絕不強制帶入預設帳號！
+                    在學費結算面板可輸入您的個人銀行帳戶（如銀行代碼、帳號與戶名），系統會自動保存。若未填寫則該位置直接留白，絕不強制帶入預設帳號！
                   </div>
                 </div>
                 <div style={{ background: cardBg, padding: "14px", borderRadius: "14px", border: `1px solid ${borderColor}` }}>
                   <div style={{ fontWeight: "bold", fontSize: "14px" }}>👥 雙學生合併結算（兄弟姊妹 / 同家長）</div>
                   <div style={{ fontSize: "13px", color: textMuted, marginTop: "4px" }}>
-                    勾選「合併第二位學生結算」並挑選第二位學生，點擊「核算學費」即可同時計算兩位學生的課堂堂數與費用，並產出合併合計總金額與詳細條列文案。
+                    勾選「合併第二位學生結算」並挑選第二位學生，點擊「核算雙人學費」即可同時計算兩位學生的堂數與費用，並產出合併合計總金額與詳細條列文案。
                   </div>
                 </div>
                 <div style={{ background: cardBg, padding: "14px", borderRadius: "14px", border: `1px solid ${borderColor}` }}>
@@ -283,15 +290,15 @@ export function TeacherGuideModal({
               </p>
               <div style={{ display: "grid", gap: "12px", marginTop: "16px" }}>
                 <div style={{ background: cardBg, padding: "14px", borderRadius: "14px", border: `1px solid ${borderColor}` }}>
-                  <div style={{ fontWeight: "bold", fontSize: "14px" }}>🗓️ 排定每週常態與加課日程</div>
+                  <div style={{ fontWeight: "bold", fontSize: "14px" }}>🗓️ 排定常態與加課日程</div>
                   <div style={{ fontSize: "13px", color: textMuted, marginTop: "4px" }}>
-                    可設定每週重複課表或單次課程，並支援指定特定學生或全體活動。
+                    可設定每週重複課表或單次課程，排課時指定所屬學生。
                   </div>
                 </div>
                 <div style={{ background: cardBg, padding: "14px", borderRadius: "14px", border: `1px solid ${borderColor}` }}>
                   <div style={{ fontWeight: "bold", fontSize: "14px" }}>❌ 單日停課與請假調課</div>
                   <div style={{ fontSize: "13px", color: textMuted, marginTop: "4px" }}>
-                    點擊日曆上的任何課程事件，可直接設定單日停課或順延調課，同時連動進度表日期。
+                    點擊日曆上的任何課程事件，可直接設定單日停課或順延調課，同時自動連動進度表日期。
                   </div>
                 </div>
                 <div style={{ background: cardBg, padding: "14px", borderRadius: "14px", border: `1px solid ${borderColor}` }}>
@@ -303,41 +310,17 @@ export function TeacherGuideModal({
               </div>
             </div>
           )}
-
-          {activeTab === "permission" && (
-            <div>
-              <h3 style={{ fontSize: "16px", fontWeight: "bold", color: primaryColor, marginTop: 0 }}>
-                👩‍🏫 協同教學與學生權限隔離系統
-              </h3>
-              <p style={{ fontSize: "14px", color: textMuted }}>
-                支援多位老師共同教學，嚴格保障學生隱私與資料安全：
-              </p>
-              <div style={{ display: "grid", gap: "12px", marginTop: "16px" }}>
-                <div style={{ background: cardBg, padding: "14px", borderRadius: "14px", border: `1px solid ${borderColor}` }}>
-                  <div style={{ fontWeight: "bold", fontSize: "14px" }}>🔒 嚴格的資料隔離機制</div>
-                  <div style={{ fontSize: "13px", color: textMuted, marginTop: "4px" }}>
-                    協同老師登入後，下拉選單、上課紀錄、考試成績、學費結算與今日看板，嚴格僅顯示被指派給他的學生，看不到非其負責的學生資料。
-                  </div>
-                </div>
-                <div style={{ background: cardBg, padding: "14px", borderRadius: "14px", border: `1px solid ${borderColor}` }}>
-                  <div style={{ fontWeight: "bold", fontSize: "14px" }}>⚙️ 總管理員專屬管理面板</div>
-                  <div style={{ fontSize: "13px", color: textMuted, marginTop: "4px" }}>
-                    僅總管理員可存取「設定管理」➔「協同老師帳號與授課指派」，新增外聘老師帳號並透過複選核取方塊即時分配負責學生。
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* 底部按鈕 */}
+        {/* 底部確認按鈕 (固定於底部，絕不被蓋住) */}
         <div
           style={{
-            padding: "16px 24px",
+            padding: "14px 22px",
             borderTop: `1px solid ${borderColor}`,
             display: "flex",
             justifyContent: "flex-end",
             background: cardBg,
+            flexShrink: 0,
           }}
         >
           <button
@@ -361,4 +344,3 @@ export function TeacherGuideModal({
     </div>
   );
 }
-
